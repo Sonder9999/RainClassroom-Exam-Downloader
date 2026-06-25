@@ -91,21 +91,56 @@
             ⚠️ 离线模式：正在浏览本地 HAR 归档数据
           </div>
         </div>
+
+        <div class="dashboard-tabs">
+          <button id="tab-console" class="tab-btn active">课程大纲</button>
+          <button id="tab-settings" class="tab-btn">系统设置</button>
+        </div>
         
         <div class="dashboard-body">
-          <!-- Course Selector -->
-          <div class="course-selector-wrapper">
-            <label for="course-select">选择课程：</label>
-            <select id="course-select" class="select-control">
-              <option value="">-- 加载课程中 --</option>
-            </select>
+          <!-- Console Tab Content -->
+          <div id="console-tab-content">
+            <!-- Course Selector -->
+            <div class="course-selector-wrapper">
+              <label for="course-select">选择课程：</label>
+              <select id="course-select" class="select-control">
+                <option value="">-- 加载课程中 --</option>
+              </select>
+            </div>
+
+            <!-- Chapters and Lessons List -->
+            <div class="chapters-wrapper">
+              <h3>章节大纲</h3>
+              <div id="chapters-list" class="chapters-list-container">
+                <div class="placeholder-text">请先选择一门课程以展示大纲</div>
+              </div>
+            </div>
           </div>
 
-          <!-- Chapters and Lessons List -->
-          <div class="chapters-wrapper">
-            <h3>章节大纲</h3>
-            <div id="chapters-list" class="chapters-list-container">
-              <div class="placeholder-text">请先选择一门课程以展示大纲</div>
+          <!-- Settings Tab Content -->
+          <div id="settings-tab-content" class="settings-tab-content hidden">
+            <div class="settings-group">
+              <label for="setting-download-dir">下载输出目录：</label>
+              <input type="text" id="setting-download-dir" class="input-control" placeholder="downloads">
+            </div>
+
+            <div class="settings-group">
+              <label for="setting-concurrency">下载并发限制（线程数）：</label>
+              <input type="number" id="setting-concurrency" class="input-control" min="1" max="10" placeholder="5">
+            </div>
+
+            <div class="settings-group">
+              <label id="setting-show-archived-label" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                <span>显示已归档的旧学期课程：</span>
+                <label class="switch" style="pointer-events: none;">
+                  <input type="checkbox" id="setting-show-archived">
+                  <span class="slider round"></span>
+                </label>
+              </label>
+            </div>
+
+            <div style="margin-top: 1rem;">
+              <button id="btn-save-settings" class="btn btn-primary" style="width: 100%;">保存自定义设置</button>
             </div>
           </div>
         </div>
@@ -116,6 +151,24 @@
     <footer class="app-footer">
       <p>© 2026 Rain Classroom Assistant. Designed in Firefly HSL style.</p>
     </footer>
+  </div>
+
+  <!-- Progress Modal -->
+  <div id="progress-modal" class="modal hidden">
+    <div class="modal-content card">
+      <h3 id="modal-title">正在下载课件...</h3>
+      <div class="progress-bar-container">
+        <div id="modal-progress-bar" class="progress-bar-fill" style="width: 0%"></div>
+      </div>
+      <div class="progress-info">
+        <span id="modal-percent">0%</span>
+        <span id="modal-speed">0 KB/s</span>
+      </div>
+      <div class="modal-status" id="modal-status-text">准备下载...</div>
+      <div class="modal-actions">
+        <button id="btn-close-modal" class="btn btn-outline hidden">关闭窗口</button>
+      </div>
+    </div>
   </div>
 
   <script src="/app.js"></script>
