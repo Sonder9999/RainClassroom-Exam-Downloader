@@ -173,42 +173,50 @@ function renderCourseGrid(courses) {
 
 // Populate Courses List
 async function loadCourses() {
+  console.log("[App] Starting to load courses...");
   try {
     coursesGrid.innerHTML = '<div class="spinner" style="margin: 2rem auto;"></div>';
+    console.log("[App] Fetching courses from /api/offline/courses...");
     const res = await fetch("/api/offline/courses");
-    if (!res.ok) throw new Error("Failed to fetch HAR courses");
+    console.log("[App] Fetch courses response status:", res.status);
+    if (!res.ok) throw new Error(`Failed to fetch HAR courses: HTTP status ${res.status}`);
     
     const courses = await res.json();
+    console.log(`[App] Successfully fetched ${courses.length} courses:`, courses);
     renderCourseGrid(courses);
   } catch (err) {
     console.error("[App] Error loading courses list:", err);
-    coursesGrid.innerHTML = '<div class="placeholder-text" style="color: var(--error);">加载课程列表失败</div>';
+    coursesGrid.innerHTML = `<div class="placeholder-text" style="color: var(--error);">加载课程列表失败: ${err.message || err}</div>`;
   }
 }
 
 // Leaf Type helpers
-function getLeafBadge(type) {
+function getLeafBadgeInfo(type) {
   switch (type) {
-    case 8: return "📝 PPT 课件";
-    case 9: return "✍️ 作业";
-    case 5: return "⏱️ 考试";
-    case 7: return "🎥 视频/文档";
-    default: return "📄 其他活动";
+    case 8: return { text: "课件", className: "badge-ppt" };
+    case 9: return { text: "作业", className: "badge-homework" };
+    case 5: return { text: "考试", className: "badge-exam" };
+    default: return { text: "活动", className: "badge-other" };
   }
 }
 
 // Render Chapters and Lessons List
 async function loadCourseChapters(classroomId, sign) {
+  console.log(`[App] Starting to load course chapters for classroomId: ${classroomId}, sign: ${sign}`);
   try {
     chaptersList.innerHTML = '<div class="spinner" style="margin: 2rem auto;"></div>';
     
     // Fetch chapters (intercepted by backend if in offline mode)
     const url = `/mooc-api/v1/lms/learn/course/chapter?cid=${classroomId}&sign=${sign}&term=latest&classroom_id=${classroomId}`;
+    console.log(`[App] Fetching chapters from: ${url}`);
     const res = await fetch(url);
-    if (!res.ok) throw new Error("Failed to fetch course chapters");
+    console.log(`[App] Fetch chapters response status: ${res.status}`);
+    if (!res.ok) throw new Error(`Failed to fetch course chapters: HTTP status ${res.status}`);
 
     const payload = await res.json();
+    console.log("[App] Chapters API response payload structure:", payload);
     const chapters = payload.data?.course_chapter || [];
+    console.log(`[App] Loaded ${chapters.length} chapters`);
 
     // Pre-calculate sequential indices separately for PPT, exams, and homework
     let pptIndex = 0;
@@ -257,11 +265,23 @@ async function loadCourseChapters(classroomId, sign) {
         nameSpan.className = "lesson-name";
         nameSpan.textContent = leaf.name;
 
-        const metaDiv = document.createElement("div");
-        metaDiv.className = "lesson-meta";
+        const rightContainer = document.createElement("div");
+        rightContainer.className = "lesson-right";
 
-        const dateStr = leaf.start_time ? new Date(leaf.start_time).toLocaleDateString("zh-CN") : "";
-        metaDiv.textContent = `${getLeafBadge(leaf.leaf_type)} ${dateStr ? `| ${dateStr}` : ""}`;
+        // Create styled text badge
+        const badgeSpan = document.createElement("span");
+        const badgeInfo = getLeafBadgeInfo(leaf.leaf_type);
+        badgeSpan.className = `badge ${badgeInfo.className}`;
+        badgeSpan.textContent = badgeInfo.text;
+        rightContainer.appendChild(badgeSpan);
+
+        // Date text
+        if (leaf.start_time) {
+          const dateSpan = document.createElement("span");
+          dateSpan.className = "lesson-date";
+          dateSpan.textContent = new Date(leaf.start_time).toLocaleDateString("zh-CN");
+          rightContainer.appendChild(dateSpan);
+        }
 
         // If PPT slide, add download button
         if (leaf.leaf_type === 8 && leaf.lessonIndex !== undefined) {
@@ -272,7 +292,7 @@ async function loadCourseChapters(classroomId, sign) {
             e.stopPropagation();
             triggerLessonDownload(classroomId, leaf.id, currentSelectedCourseName, leaf.lessonIndex, leaf.name, 8);
           };
-          metaDiv.appendChild(dlBtn);
+          rightContainer.appendChild(dlBtn);
         } else if (leaf.leaf_type === 5 && leaf.lessonIndex !== undefined) {
           const dlBtn = document.createElement("button");
           dlBtn.className = "btn btn-sm btn-download";
@@ -281,7 +301,7 @@ async function loadCourseChapters(classroomId, sign) {
             e.stopPropagation();
             triggerLessonDownload(classroomId, leaf.id, currentSelectedCourseName, leaf.lessonIndex, leaf.name, 5);
           };
-          metaDiv.appendChild(dlBtn);
+          rightContainer.appendChild(dlBtn);
         } else if (leaf.leaf_type === 9 && leaf.lessonIndex !== undefined) {
           const dlBtn = document.createElement("button");
           dlBtn.className = "btn btn-sm btn-download";
@@ -290,11 +310,11 @@ async function loadCourseChapters(classroomId, sign) {
             e.stopPropagation();
             triggerLessonDownload(classroomId, leaf.id, currentSelectedCourseName, leaf.lessonIndex, leaf.name, 9);
           };
-          metaDiv.appendChild(dlBtn);
+          rightContainer.appendChild(dlBtn);
         }
 
         lessonItem.appendChild(nameSpan);
-        lessonItem.appendChild(metaDiv);
+        lessonItem.appendChild(rightContainer);
         lessonsDiv.appendChild(lessonItem);
       });
 
@@ -309,10 +329,13 @@ async function loadCourseChapters(classroomId, sign) {
 
 // Check Current Session Status
 async function checkSession() {
+  console.log("[App] checkSession invoked. Fetching configuration...");
   try {
     const res = await fetch("/api/config");
+    console.log("[App] /api/config response status:", res.status);
     if (res.ok) {
       const config = await res.json();
+      console.log("[App] Config received:", config);
       currentOfflineMode = config.offlineMode;
       offlineSwitch.checked = currentOfflineMode;
       offlineBanner.classList.toggle("hidden", !currentOfflineMode);
@@ -321,6 +344,16 @@ async function checkSession() {
       document.getElementById("setting-download-dir").value = config.downloadDir || "downloads";
       document.getElementById("setting-concurrency").value = config.concurrency || 5;
       document.getElementById("setting-show-archived").checked = !!config.showArchived;
+
+      // Populate xuetangx cookies if stored
+      const storedCookies = [];
+      const c = config.cookies || {};
+      if (c.x_access_token) storedCookies.push(`x_access_token=${c.x_access_token}`);
+      if (c._abfpc) storedCookies.push(`_abfpc=${c._abfpc}`);
+      if (c.cna) storedCookies.push(`cna=${c.cna}`);
+      if (c.sensorsdata2015jssdkcross) storedCookies.push(`sensorsdata2015jssdkcross=${c.sensorsdata2015jssdkcross}`);
+      if (c.xt_lang) storedCookies.push(`xt_lang=${c.xt_lang}`);
+      document.getElementById("setting-xuetangx-cookie").value = storedCookies.join("; ");
 
       if (currentOfflineMode) {
         console.log("[App] Operating in offline mode. Showing mock course dashboard.");
@@ -343,6 +376,8 @@ async function checkSession() {
           connectAuthWebSocket();
         }
       }
+    } else {
+      console.error("[App] Failed to fetch /api/config. Status:", res.status);
     }
   } catch (err) {
     console.error("[App] Error loading application config:", err);
@@ -418,6 +453,28 @@ btnSaveSettings.addEventListener("click", async () => {
   const concurrency = parseInt(document.getElementById("setting-concurrency").value) || 5;
   const showArchived = document.getElementById("setting-show-archived").checked;
 
+  const xuetangxCookieRaw = document.getElementById("setting-xuetangx-cookie").value.trim();
+  const xuetangxCookies = {
+    x_access_token: "",
+    _abfpc: "",
+    cna: "",
+    sensorsdata2015jssdkcross: "",
+    xt_lang: ""
+  };
+  if (xuetangxCookieRaw) {
+    const parts = xuetangxCookieRaw.split(";");
+    for (const part of parts) {
+      const eqIdx = part.indexOf("=");
+      if (eqIdx > 0) {
+        const key = part.substring(0, eqIdx).trim();
+        const val = part.substring(eqIdx + 1).trim();
+        if (["x_access_token", "_abfpc", "cna", "sensorsdata2015jssdkcross", "xt_lang"].includes(key)) {
+          xuetangxCookies[key] = val;
+        }
+      }
+    }
+  }
+
   try {
     btnSaveSettings.textContent = "正在保存...";
     btnSaveSettings.disabled = true;
@@ -428,7 +485,8 @@ btnSaveSettings.addEventListener("click", async () => {
       body: JSON.stringify({
         downloadDir,
         concurrency,
-        showArchived
+        showArchived,
+        cookies: xuetangxCookies
       })
     });
     if (res.ok) {

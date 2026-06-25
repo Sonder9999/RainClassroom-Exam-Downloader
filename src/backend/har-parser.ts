@@ -67,8 +67,8 @@ export async function initHarIndex(): Promise<void> {
       let entriesCount = 0;
       for (const entry of har.log.entries) {
         const urlStr = entry.request.url;
-        // Only index requests targeting yuketang
-        if (!urlStr.includes("yuketang.cn")) {
+        // Only index requests targeting yuketang or xuetangx
+        if (!urlStr.includes("yuketang.cn") && !urlStr.includes("xuetangx.com")) {
           continue;
         }
 

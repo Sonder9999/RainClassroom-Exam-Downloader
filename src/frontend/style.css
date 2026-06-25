@@ -623,13 +623,60 @@ input:checked + .slider:before {
 
 .lesson-name {
   color: var(--text-main);
-  font-weight: 400;
+  font-weight: 500;
   text-align: left;
+  flex: 1;
+  margin-right: 1.5rem;
 }
 
-.lesson-meta {
+.lesson-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.lesson-date {
   font-size: 0.75rem;
   color: var(--text-sub);
+  opacity: 0.85;
+}
+
+/* Badge System */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.03em;
+}
+
+.badge-ppt {
+  background: hsla(160, 80%, 40%, 0.12);
+  color: hsl(160, 85%, 45%);
+  border: 1px solid hsla(160, 80%, 40%, 0.2);
+}
+
+.badge-exam {
+  background: hsla(15, 85%, 45%, 0.12);
+  color: hsl(15, 90%, 55%);
+  border: 1px solid hsla(15, 85%, 45%, 0.2);
+}
+
+.badge-homework {
+  background: hsla(260, 85%, 55%, 0.12);
+  color: hsl(260, 90%, 68%);
+  border: 1px solid hsla(260, 85%, 55%, 0.2);
+}
+
+.badge-other {
+  background: hsla(210, 15%, 40%, 0.12);
+  color: hsl(210, 15%, 75%);
+  border: 1px solid hsla(210, 15%, 40%, 0.2);
 }
 
 /* Utilities */

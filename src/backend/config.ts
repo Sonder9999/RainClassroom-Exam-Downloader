@@ -8,6 +8,11 @@ export interface Cookies {
   university_id: string;
   platform_id: string;
   _cf_bm?: string;
+  x_access_token?: string;
+  _abfpc?: string;
+  cna?: string;
+  sensorsdata2015jssdkcross?: string;
+  xt_lang?: string;
 }
 
 export interface Config {

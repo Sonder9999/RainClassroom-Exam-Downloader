@@ -9,7 +9,9 @@ import { loadConfig, updateConfig } from "./config";
 export const offlinePlugin = new Elysia()
   // 1. Get available mock or online courses list
   .get("/api/offline/courses", async () => {
+    console.log("[Server] GET /api/offline/courses request received");
     const config = await loadConfig();
+    console.log(`[Server] config loaded: offlineMode=${config.offlineMode}, authenticated=${!!config.cookies.sessionid}`);
     if (config.offlineMode) {
       const courses = getAvailableHarCourses(config.showArchived);
       console.log(`[Offline] Returning ${courses.length} courses from HAR cache (showArchived: ${config.showArchived})`);
@@ -42,14 +44,22 @@ export const offlinePlugin = new Elysia()
           "terminal-type": "web"
         };
 
-        const resList = await fetch("https://www.yuketang.cn/v2/api/web/courses/list", {
+        console.log("[Online] Sending request to YuKeTang course list API (identity=2)...");
+        const resList = await fetch("https://www.yuketang.cn/v2/api/web/courses/list?identity=2", {
           headers: yktHeaders
         });
         if (!resList.ok) {
           throw new Error(`Courses list HTTP error: ${resList.status}`);
         }
         const coursesData = await resList.json();
+        console.log(`[Online] Course list response errcode: ${coursesData.errcode}, errmsg: ${coursesData.errmsg}`);
+        
+        if (coursesData.errcode !== 0) {
+          throw new Error(`YuKeTang course list returned error: ${coursesData.errmsg || "Unknown error"}`);
+        }
+
         const list = coursesData.data?.list || [];
+        console.log(`[Online] Fetched ${list.length} total courses from YuKeTang`);
 
         let filteredList = list;
         if (!config.showArchived) {
@@ -58,6 +68,7 @@ export const offlinePlugin = new Elysia()
             return term === "202502" || term === "latest";
           });
         }
+        console.log(`[Online] Filtered list size: ${filteredList.length} (showArchived: ${config.showArchived})`);
 
         // Concurrently fetch sign details
         const courses = await Promise.all(
@@ -65,17 +76,25 @@ export const offlinePlugin = new Elysia()
             const cid = item.classroom_id;
             const courseName = item.course?.name || item.name || "未知课程";
             try {
+              console.log(`[Online] Fetching classroom sign details for cid: ${cid} (${courseName})`);
               const resDetail = await fetch(`https://www.yuketang.cn/v2/api/web/classrooms/${cid}?role=5`, {
                 headers: yktHeaders
               });
               if (resDetail.ok) {
                 const detail = await resDetail.json();
-                return {
-                  id: String(cid),
-                  name: courseName,
-                  courseSign: detail.data?.course_sign || "",
-                  term: String(item.term || "latest")
-                };
+                if (detail.errcode === 0) {
+                  console.log(`[Online] Successfully resolved sign for ${cid} -> ${detail.data?.course_sign}`);
+                  return {
+                    id: String(cid),
+                    name: courseName,
+                    courseSign: detail.data?.course_sign || "",
+                    term: String(item.term || "latest")
+                  };
+                } else {
+                  console.warn(`[Online] Failed to resolve sign for ${cid}: errcode ${detail.errcode}, errmsg ${detail.errmsg}`);
+                }
+              } else {
+                console.warn(`[Online] Classroom detail HTTP error for ${cid}: ${resDetail.status}`);
               }
             } catch (err) {
               console.error(`[Online] Failed to fetch classroom sign for ${cid}:`, err);

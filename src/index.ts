@@ -25,7 +25,9 @@ export const app = new Elysia()
   .get("/", () => Bun.file("src/frontend/index.html"))
   // 3. Expose configuration metadata endpoint
   .get("/api/config", async () => {
+    console.log("[Server] GET /api/config requested");
     const activeConfig = await loadConfig();
+    console.log(`[Server] config loaded: offlineMode=${activeConfig.offlineMode}, authenticated=${!!activeConfig.cookies.sessionid}`);
     return {
       hue: activeConfig.hue,
       offlineMode: activeConfig.offlineMode,
@@ -36,7 +38,9 @@ export const app = new Elysia()
     };
   })
   .post("/api/config", async ({ body }: { body: Partial<Config> }) => {
+    console.log("[Server] POST /api/config received body:", JSON.stringify(body));
     const updated = await updateConfig(body);
+    console.log(`[Server] config updated: offlineMode=${updated.offlineMode}, authenticated=${!!updated.cookies.sessionid}`);
     return {
       success: true,
       config: {

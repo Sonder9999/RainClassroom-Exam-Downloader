@@ -76,46 +76,151 @@ async function fetchFromYuketang(urlStr: string): Promise<any> {
   return await res.json();
 }
 
+async function fetchFromXuetangx(urlStr: string): Promise<any> {
+  const config = await loadConfig();
+  if (config.offlineMode) {
+    const mock = getMockResponse("GET", urlStr);
+    if (!mock) {
+      throw new Error(`Offline cache miss for Xuetangx URL: ${urlStr}`);
+    }
+    return JSON.parse(mock.text);
+  }
+
+  const cookies = config.cookies;
+  const cookieParts: string[] = [];
+  if (cookies.x_access_token) cookieParts.push(`x_access_token=${cookies.x_access_token}`);
+  if (cookies._abfpc) cookieParts.push(`_abfpc=${cookies._abfpc}`);
+  if (cookies.cna) cookieParts.push(`cna=${cookies.cna}`);
+  if (cookies.sensorsdata2015jssdkcross) cookieParts.push(`sensorsdata2015jssdkcross=${cookies.sensorsdata2015jssdkcross}`);
+  if (cookies.xt_lang) cookieParts.push(`xt_lang=${cookies.xt_lang}`);
+
+  // Fallback to yuketang cookies if no xuetangx cookies are set
+  if (cookieParts.length === 0) {
+    cookieParts.push(
+      `sessionid=${cookies.sessionid}`,
+      `csrftoken=${cookies.csrftoken}`,
+      `xtbz=${cookies.xtbz}`,
+      `university_id=${cookies.university_id}`,
+      `platform_id=${cookies.platform_id}`
+    );
+    if (cookies._cf_bm) {
+      cookieParts.push(`_cf_bm=${cookies._cf_bm}`);
+    }
+  }
+  const cookieHeader = cookieParts.join("; ");
+
+  const res = await fetch(urlStr, {
+    method: "GET",
+    headers: {
+      "cookie": cookieHeader,
+      "x-csrftoken": cookies.csrftoken || "",
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "referer": "https://examination.xuetangx.com/",
+      "x-client": "web",
+      "xtbz": "cloud"
+    }
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch from Xuetangx, status: ${res.status}`);
+  }
+  return await res.json();
+}
+
+function cleanHtml(html: string): string {
+  if (!html) return "";
+  let text = html;
+
+  // Replace images
+  text = text.replace(/<img[^>]+src="([^">]+)"[^>]*>/gi, "![]($1)");
+  text = text.replace(/<img[^>]+src='([^'>]+)'[^>]*>/gi, "![]($1)");
+
+  // Replace line breaks / paragraphs
+  text = text.replace(/<\/p>/gi, "\n");
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+
+  // Remove other HTML tags
+  text = text.replace(/<[^>]+>/g, "");
+
+  // Decode common HTML entities
+  text = text
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+
+  return text.trim();
+}
+
+async function findActivityInLogs(
+  classroomId: string,
+  leafTitle: string,
+  targetTypes: number[]
+): Promise<any | null> {
+  let page = 0;
+  const offset = 100;
+  let lastFirstId: any = null;
+  const maxPages = 10;
+
+  while (page < maxPages) {
+    try {
+      const logsUrl = `https://www.yuketang.cn/v2/api/web/logs/learn/${classroomId}?actype=-1&page=${page}&offset=${offset}&sort=-1`;
+      const logsData = await fetchFromYuketang(logsUrl);
+      const activities = logsData.data?.activities || [];
+      if (activities.length === 0) {
+        break;
+      }
+
+      // Prevent infinite loops in offline mock mode
+      const currentFirstId = activities[0]?.id;
+      if (currentFirstId !== undefined && currentFirstId === lastFirstId) {
+        console.log(`[Downloader] Duplicate activity list detected at page ${page}, stopping log search.`);
+        break;
+      }
+      lastFirstId = currentFirstId;
+
+      const match = activities.find((act: any) => {
+        if (!targetTypes.includes(act.type)) return false;
+        const actTitle = (act.title || "").trim().toLowerCase();
+        const targetTitle = leafTitle.trim().toLowerCase();
+        return actTitle === targetTitle;
+      });
+
+      if (match) {
+        return match;
+      }
+      if (activities.length < offset) {
+        break;
+      }
+      page++;
+    } catch (err) {
+      console.warn(`[Downloader] Error fetching logs page ${page}:`, err);
+      break;
+    }
+  }
+  return null;
+}
+
 async function resolveLessonId(
   classroomId: string,
   leafId: string,
   leafTitle: string,
   leafType: number
 ): Promise<string> {
-  const config = await loadConfig();
-  
   if (leafType === 8) {
-    try {
-      const logsUrl = `https://www.yuketang.cn/v2/api/web/logs/learn/${classroomId}?actype=14&page=0&offset=100&sort=-1`;
-      const logsData = await fetchFromYuketang(logsUrl);
-      const activities = logsData.data?.activities || [];
-      const match = activities.find((act: any) => 
-        act.type === 14 && 
-        (act.title === leafTitle || act.title?.trim() === leafTitle.trim())
-      );
-      if (match) {
-        console.log(`[Downloader] Resolved leaf ${leafId} (${leafTitle}) to lessonId ${match.courseware_id} via logs`);
-        return String(match.courseware_id);
-      }
-    } catch (err) {
-      console.warn(`[Downloader] Failed to resolve lessonId via logs for leaf ${leafId}:`, err);
+    const match = await findActivityInLogs(classroomId, leafTitle, [14]);
+    if (match) {
+      console.log(`[Downloader] Resolved leaf ${leafId} (${leafTitle}) to lessonId ${match.courseware_id} via logs`);
+      return String(match.courseware_id);
     }
   } else if (leafType === 5 || leafType === 9) {
-    try {
-      const logsUrl = `https://www.yuketang.cn/v2/api/web/logs/learn/${classroomId}?actype=-1&page=0&offset=100&sort=-1`;
-      const logsData = await fetchFromYuketang(logsUrl);
-      const activities = logsData.data?.activities || [];
-      const targetTypes = leafType === 5 ? [5] : [4, 9, 2];
-      const match = activities.find((act: any) => 
-        targetTypes.includes(act.type) && 
-        (act.title === leafTitle || act.title?.trim() === leafTitle.trim())
-      );
-      if (match) {
-        console.log(`[Downloader] Resolved exam/homework leaf ${leafId} (${leafTitle}) to courseware_id ${match.courseware_id} via logs`);
-        return String(match.courseware_id);
-      }
-    } catch (err) {
-      console.warn(`[Downloader] Failed to resolve exam/homework ID via logs for leaf ${leafId}:`, err);
+    const targetTypes = leafType === 5 ? [5] : [4, 9, 2];
+    const match = await findActivityInLogs(classroomId, leafTitle, targetTypes);
+    if (match) {
+      console.log(`[Downloader] Resolved exam/homework leaf ${leafId} (${leafTitle}) to courseware_id ${match.courseware_id} via logs`);
+      return String(match.courseware_id);
     }
   }
   return leafId;
@@ -145,23 +250,34 @@ export async function downloadLesson(
       let logsMatch: any = null;
 
       try {
-        const logsUrl = `https://www.yuketang.cn/v2/api/web/logs/learn/${classroomId}?actype=-1&page=0&offset=100&sort=-1`;
-        const logsData = await fetchFromYuketang(logsUrl);
-        const activities = logsData.data?.activities || [];
         const targetTypes = leafType === 5 ? [5] : [4, 9, 2];
-        logsMatch = activities.find((act: any) => 
-          targetTypes.includes(act.type) && 
-          (act.title === lessonTitle || act.title?.trim() === lessonTitle.trim())
-        );
+        logsMatch = await findActivityInLogs(classroomId, lessonTitle, targetTypes);
       } catch (err) {
         console.warn(`[Downloader] Failed to fetch logs for cover/attachment resolution:`, err);
       }
 
       try {
-        const coverUrl = `https://www.yuketang.cn/v/exam/cover?exam_id=${resolvedLessonId}&classroom_id=${classroomId}`;
-        coverData = await fetchFromYuketang(coverUrl);
+        const coverUrl = `https://examination.xuetangx.com/exam_room/cover?exam_id=${resolvedLessonId}`;
+        coverData = await fetchFromXuetangx(coverUrl);
       } catch (err) {
         console.warn(`[Downloader] Failed to fetch exam cover data:`, err);
+      }
+
+      let paperData: any = null;
+      let resultsData: any = null;
+
+      try {
+        const paperUrl = `https://examination.xuetangx.com/exam_room/show_paper?exam_id=${resolvedLessonId}`;
+        paperData = await fetchFromXuetangx(paperUrl);
+      } catch (err) {
+        console.warn(`[Downloader] Failed to fetch exam paper questions:`, err);
+      }
+
+      try {
+        const resultsUrl = `https://examination.xuetangx.com/exam_room/problem_results?exam_id=${resolvedLessonId}`;
+        resultsData = await fetchFromXuetangx(resultsUrl);
+      } catch (err) {
+        console.warn(`[Downloader] Failed to fetch exam problem results:`, err);
       }
 
       const title = coverData?.data?.title || logsMatch?.title || lessonTitle;
@@ -219,6 +335,95 @@ export async function downloadLesson(
         downloadedFiles.forEach(file => {
           mdLines.push(`- [${file}](./${encodeURIComponent(file)})`);
         });
+        mdLines.push("");
+      }
+
+      const problems = paperData?.data?.problems || [];
+      if (problems.length > 0) {
+        const resultsMap = new Map<number, any>();
+        const resList = resultsData?.data?.problem_results || [];
+        for (const res of resList) {
+          if (res.problem_id) {
+            resultsMap.set(res.problem_id, res);
+          }
+        }
+
+        mdLines.push("## 试题详情");
+        mdLines.push("");
+
+        for (let i = 0; i < problems.length; i++) {
+          const p = problems[i];
+          const pId = p.ProblemID || p.problem_id;
+          const pType = p.Type;
+          const pTypeText = p.TypeText || pType;
+          const pScore = p.Score || p.score || 0;
+          const pBody = cleanHtml(p.Body || "");
+
+          mdLines.push(`### 题 ${i + 1} (${pTypeText} - ${pScore}分)`);
+          mdLines.push("");
+          mdLines.push(pBody);
+          mdLines.push("");
+
+          const options = p.Options || [];
+          if (options.length > 0) {
+            mdLines.push("**选项**:");
+            for (const opt of options) {
+              const optKey = opt.key;
+              const optVal = cleanHtml(opt.value || "");
+              mdLines.push(`- **${optKey}**: ${optVal}`);
+            }
+            mdLines.push("");
+          }
+
+          const res = pId ? resultsMap.get(pId) : null;
+
+          let correctAnsStr = "";
+          if (p.Answer) {
+            if (Array.isArray(p.Answer)) {
+              correctAnsStr = p.Answer.join(", ");
+            } else {
+              correctAnsStr = String(p.Answer);
+            }
+          } else if (res && res.answer) {
+            if (Array.isArray(res.answer)) {
+              correctAnsStr = res.answer.join(", ");
+            } else if (typeof res.answer === "object") {
+              correctAnsStr = JSON.stringify(res.answer);
+            } else {
+              correctAnsStr = String(res.answer);
+            }
+          }
+
+          let myAnsStr = "未作答";
+          if (res && res.result !== undefined && res.result !== null) {
+            if (Array.isArray(res.result)) {
+              myAnsStr = res.result.join(", ");
+            } else if (typeof res.result === "object") {
+              myAnsStr = JSON.stringify(res.result);
+            } else {
+              myAnsStr = String(res.result);
+            }
+          }
+
+          mdLines.push(`- **正确答案**: ${correctAnsStr || "未知"}`);
+          mdLines.push(`- **我的作答**: ${myAnsStr}`);
+
+          if (res) {
+            const isCorrect = res.correct ? "是" : "否";
+            const myScore = res.grade !== undefined ? `${res.grade}分` : "未知";
+            mdLines.push(`- **是否正确**: ${isCorrect}`);
+            mdLines.push(`- **得分**: ${myScore}`);
+          }
+
+          if (p.Remark || p.remark) {
+            mdLines.push(`- **解析**: ${cleanHtml(p.Remark || p.remark)}`);
+          }
+
+          mdLines.push("");
+        }
+      } else {
+        mdLines.push("> [!WARNING]");
+        mdLines.push("> 无法获取试卷详细题目（可能是在线模式下未登录或鉴权失败）。");
         mdLines.push("");
       }
 
