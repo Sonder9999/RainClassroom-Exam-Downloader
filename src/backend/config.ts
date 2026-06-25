@@ -105,3 +105,11 @@ export async function updateConfig(updates: Partial<Config>): Promise<Config> {
   await saveConfig(updated);
   return updated;
 }
+
+/**
+ * Resets the in-memory cached configuration (used primarily in tests).
+ */
+export function resetConfigCache(): void {
+  cachedConfig = null;
+}
+

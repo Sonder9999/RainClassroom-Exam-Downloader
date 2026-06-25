@@ -1,7 +1,7 @@
 import { expect, test, describe, beforeAll, afterAll } from "bun:test";
 import { promises as fs } from "fs";
 import { join } from "path";
-import { loadConfig, saveConfig, updateConfig, Config } from "../src/backend/config";
+import { loadConfig, saveConfig, updateConfig, resetConfigCache, Config } from "../src/backend/config";
 
 const TEST_CONFIG_DIR = join(process.cwd(), "config");
 const TEST_CONFIG_PATH = join(TEST_CONFIG_DIR, "default.json");
@@ -16,6 +16,11 @@ describe("Configuration Manager Tests", () => {
     } catch {
       backupConfig = null;
     }
+    // Remove local default.json for clean testing
+    try {
+      await fs.unlink(TEST_CONFIG_PATH);
+    } catch {}
+    resetConfigCache();
   });
 
   afterAll(async () => {
@@ -27,6 +32,7 @@ describe("Configuration Manager Tests", () => {
         await fs.unlink(TEST_CONFIG_PATH);
       } catch {}
     }
+    resetConfigCache();
   });
 
   test("should load default configuration successfully", async () => {

@@ -23,7 +23,13 @@
         <h1>雨课堂下载器</h1>
       </div>
       <div class="header-actions">
-        <div id="mode-badge" class="badge badge-online">在线模式</div>
+        <div class="toggle-container">
+          <span class="toggle-label">离线模式</span>
+          <label class="switch">
+            <input type="checkbox" id="offline-switch">
+            <span class="slider round"></span>
+          </label>
+        </div>
         <button id="theme-toggle" class="btn btn-icon" title="切换主题">
           <span id="theme-icon">🌙</span>
         </button>
@@ -74,6 +80,34 @@
 
         <div class="action-buttons">
           <button id="btn-relogin" class="btn btn-outline">重新扫码登录</button>
+        </div>
+      </section>
+
+      <!-- Dashboard Section -->
+      <section id="dashboard-section" class="card dashboard-card hidden">
+        <div class="dashboard-header">
+          <h2>课程控制台</h2>
+          <div class="offline-banner hidden" id="offline-banner">
+            ⚠️ 离线模式：正在浏览本地 HAR 归档数据
+          </div>
+        </div>
+        
+        <div class="dashboard-body">
+          <!-- Course Selector -->
+          <div class="course-selector-wrapper">
+            <label for="course-select">选择课程：</label>
+            <select id="course-select" class="select-control">
+              <option value="">-- 加载课程中 --</option>
+            </select>
+          </div>
+
+          <!-- Chapters and Lessons List -->
+          <div class="chapters-wrapper">
+            <h3>章节大纲</h3>
+            <div id="chapters-list" class="chapters-list-container">
+              <div class="placeholder-text">请先选择一门课程以展示大纲</div>
+            </div>
+          </div>
         </div>
       </section>
     </main>

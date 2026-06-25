@@ -2,6 +2,11 @@ import { Elysia } from "elysia";
 import { staticPlugin } from "@elysiajs/static";
 import { loadConfig } from "./backend/config";
 import { handleAuthWebSocket } from "./backend/auth";
+import { initHarIndex } from "./backend/har-parser";
+import { offlinePlugin } from "./backend/offline-routes";
+
+// Initialize HAR mock entries
+await initHarIndex();
 
 const config = await loadConfig();
 
@@ -13,6 +18,7 @@ export const app = new Elysia()
       prefix: "/"
     })
   )
+  .use(offlinePlugin)
   // 2. Serve main single page application at root
   .get("/", () => Bun.file("src/frontend/index.html"))
   // 3. Expose configuration metadata endpoint
