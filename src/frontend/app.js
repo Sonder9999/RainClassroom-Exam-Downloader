@@ -203,7 +203,7 @@ async function loadCourseChapters(classroomId, sign) {
     chaptersList.innerHTML = '<div class="spinner" style="margin: 2rem auto;"></div>';
     
     // Fetch chapters (intercepted by backend if in offline mode)
-    const url = `/mooc-api/v1/lms/learn/course/chapter?classroom_id=${classroomId}&course_sign=${sign}&term=latest`;
+    const url = `/mooc-api/v1/lms/learn/course/chapter?cid=${classroomId}&sign=${sign}&term=latest&classroom_id=${classroomId}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("Failed to fetch course chapters");
 
