@@ -1,0 +1,19 @@
+{
+  "name": "rainclassroom-downloader",
+  "version": "1.0.0",
+  "description": "Rain Classroom Web Downloader using Bun & ElysiaJS",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@elysiajs/static": "^1.0.0",
+    "elysia": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>雨课堂大纲与课件下载器 | Rain Classroom Downloader</title>
+  <!-- Google Fonts Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Dynamic background glow elements matching Firefly styling -->
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header card">
+      <div class="header-logo">
+        <span class="logo-icon">⭐</span>
+        <h1>雨课堂下载器</h1>
+      </div>
+      <div class="header-actions">
+        <div id="mode-badge" class="badge badge-online">在线模式</div>
+        <button id="theme-toggle" class="btn btn-icon" title="切换主题">
+          <span id="theme-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      <!-- Login Section -->
+      <section id="login-section" class="card login-card">
+        <div class="card-header">
+          <h2>微信扫码登录</h2>
+          <p class="subtitle">请使用微信扫描下方二维码登录雨课堂并获取 Session 凭证</p>
+        </div>
+        
+        <div class="qr-container">
+          <div id="qr-spinner" class="spinner"></div>
+          <img id="qr-image" src="" alt="微信登录二维码" class="hidden">
+          <div id="qr-mask" class="qr-mask hidden">
+            <span class="mask-text">二维码已过期，点击刷新</span>
+          </div>
+        </div>
+
+        <div class="status-container">
+          <div id="status-dot" class="status-dot status-pending"></div>
+          <span id="status-text">正在初始化登录会话...</span>
+        </div>
+      </section>
+
+      <!-- Authenticated Success Panel -->
+      <section id="success-section" class="card success-card hidden">
+        <div class="success-icon-wrapper">
+          <div class="success-icon">✓</div>
+        </div>
+        <h2>登录成功！</h2>
+        <p class="success-msg">系统已成功获取并储存您的 sessionid 凭证。</p>
+        
+        <div class="credential-info">
+          <div class="credential-row">
+            <span class="label">Cookie状态</span>
+            <span class="value success-text">有效 (已连接)</span>
+          </div>
+          <div class="credential-row">
+            <span class="label">当前模式</span>
+            <span class="value">在线模式 (实时同步)</span>
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <button id="btn-relogin" class="btn btn-outline">重新扫码登录</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>© 2026 Rain Classroom Assistant. Designed in Firefly HSL style.</p>
+    </footer>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

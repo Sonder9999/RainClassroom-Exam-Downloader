@@ -1,0 +1,16 @@
+{
+  "port": 3000,
+  "hue": 165,
+  "downloadDir": "downloads",
+  "concurrency": 5,
+  "offlineMode": false,
+  "yuketangUrl": "https://www.yuketang.cn",
+  "yuketangWsUrl": "wss://www.yuketang.cn/wsapp/",
+  "cookies": {
+    "sessionid": "",
+    "csrftoken": "",
+    "xtbz": "ykt",
+    "university_id": "",
+    "platform_id": "3"
+  }
+}
