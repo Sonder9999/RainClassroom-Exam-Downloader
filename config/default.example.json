@@ -4,6 +4,7 @@
   "downloadDir": "downloads",
   "concurrency": 5,
   "offlineMode": false,
+  "showArchived": false,
   "yuketangUrl": "https://www.yuketang.cn",
   "yuketangWsUrl": "wss://www.yuketang.cn/wsapp/",
   "cookies": {

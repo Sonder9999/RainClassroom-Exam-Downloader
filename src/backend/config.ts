@@ -16,6 +16,7 @@ export interface Config {
   downloadDir: string;
   concurrency: number;
   offlineMode: boolean;
+  showArchived: boolean;
   yuketangUrl: string;
   yuketangWsUrl: string;
   cookies: Cookies;
@@ -57,6 +58,7 @@ export async function loadConfig(): Promise<Config> {
         downloadDir: "downloads",
         concurrency: 5,
         offlineMode: false,
+        showArchived: false,
         yuketangUrl: "https://www.yuketang.cn",
         yuketangWsUrl: "wss://www.yuketang.cn/wsapp/",
         cookies: {

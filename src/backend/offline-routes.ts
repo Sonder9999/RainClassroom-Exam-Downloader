@@ -8,9 +8,10 @@ import { loadConfig, updateConfig } from "./config";
  */
 export const offlinePlugin = new Elysia()
   // 1. Get available mock courses list parsed from HAR logs
-  .get("/api/offline/courses", () => {
-    const courses = getAvailableHarCourses();
-    console.log(`[Offline] Returning ${courses.length} courses from HAR cache`);
+  .get("/api/offline/courses", async () => {
+    const config = await loadConfig();
+    const courses = getAvailableHarCourses(config.showArchived);
+    console.log(`[Offline] Returning ${courses.length} courses from HAR cache (showArchived: ${config.showArchived})`);
     return courses;
   })
 

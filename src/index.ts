@@ -1,6 +1,6 @@
 import { Elysia } from "elysia";
 import { staticPlugin } from "@elysiajs/static";
-import { loadConfig } from "./backend/config";
+import { loadConfig, updateConfig, Config } from "./backend/config";
 import { handleAuthWebSocket } from "./backend/auth";
 import { initHarIndex } from "./backend/har-parser";
 import { offlinePlugin } from "./backend/offline-routes";
@@ -27,7 +27,24 @@ export const app = new Elysia()
     return {
       hue: activeConfig.hue,
       offlineMode: activeConfig.offlineMode,
+      downloadDir: activeConfig.downloadDir,
+      concurrency: activeConfig.concurrency,
+      showArchived: activeConfig.showArchived,
       authenticated: !!activeConfig.cookies.sessionid
+    };
+  })
+  .post("/api/config", async ({ body }: { body: Partial<Config> }) => {
+    const updated = await updateConfig(body);
+    return {
+      success: true,
+      config: {
+        hue: updated.hue,
+        offlineMode: updated.offlineMode,
+        downloadDir: updated.downloadDir,
+        concurrency: updated.concurrency,
+        showArchived: updated.showArchived,
+        authenticated: !!updated.cookies.sessionid
+      }
     };
   })
   // 4. WebSocket route proxying WeChat QR authentication

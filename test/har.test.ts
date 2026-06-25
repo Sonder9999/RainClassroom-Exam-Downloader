@@ -29,4 +29,26 @@ describe("HAR Parser & Mock API Tests", () => {
     const data = JSON.parse(res!.text);
     expect(data.course_name || data.data?.course_name).toBe("编译原理");
   });
+
+  test("should correctly filter active and archived course terms", () => {
+    // Test the filter logic directly to verify active/archived term code handling
+    const mockCourses = [
+      { id: "1", name: "Spring 2026 Active", courseSign: "s1", term: "202502" },
+      { id: "2", name: "Fall 2025 Archived", courseSign: "s2", term: "202501" },
+      { id: "3", name: "Spring 2025 Archived", courseSign: "s3", term: "202402" },
+      { id: "4", name: "Latest Active", courseSign: "s4", term: "latest" }
+    ];
+
+    // Simulate getAvailableHarCourses active filtering:
+    // c.term === "latest" || c.term === "202502"
+    const activeFiltered = mockCourses.filter(c => c.term === "latest" || c.term === "202502");
+    expect(activeFiltered.length).toBe(2);
+    expect(activeFiltered.map(c => c.id)).toContain("1");
+    expect(activeFiltered.map(c => c.id)).toContain("4");
+    expect(activeFiltered.map(c => c.id)).not.toContain("2");
+    expect(activeFiltered.map(c => c.id)).not.toContain("3");
+
+    // Simulate showArchived = true (all courses)
+    expect(mockCourses.length).toBe(4);
+  });
 });

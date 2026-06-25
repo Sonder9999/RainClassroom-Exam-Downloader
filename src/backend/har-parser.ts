@@ -35,7 +35,7 @@ const HAR_DIR = join(process.cwd(), "docs");
 const harPathnameIndex = new Map<string, CachedResponse[]>();
 
 // List of indexed courses parsed from classrooms or logs
-const cachedCourses = new Set<{ id: string; name: string; courseSign: string }>();
+const cachedCourses = new Set<{ id: string; name: string; courseSign: string; term: string }>();
 
 /**
  * Scans the docs/ directory and loads all .har files into memory.
@@ -50,7 +50,7 @@ export async function initHarIndex(): Promise<void> {
     const harFiles = files.filter(f => f.endsWith(".har"));
     console.log(`[HAR] Found ${harFiles.length} HAR files:`, harFiles);
 
-    const seenCourses = new Map<string, { id: string; name: string; courseSign: string }>();
+    const seenCourses = new Map<string, { id: string; name: string; courseSign: string; term: string }>();
 
     for (const file of harFiles) {
       const filePath = join(HAR_DIR, file);
@@ -98,17 +98,17 @@ export async function initHarIndex(): Promise<void> {
         harPathnameIndex.set(pathname, entryList);
         entriesCount++;
 
-        // Extract Course metadata if we encounter course chapters
         if (pathname.includes("/mooc-api/v1/lms/learn/course/chapter")) {
           try {
             const classroomId = urlObj.searchParams.get("classroom_id") || urlObj.searchParams.get("cid") || "";
             const courseSign = urlObj.searchParams.get("course_sign") || urlObj.searchParams.get("sign") || "";
+            const term = urlObj.searchParams.get("term") || "latest";
             
             const payload = JSON.parse(text);
             const courseName = payload.data?.course_name || payload.data?.name || "";
             
             if (classroomId && courseName) {
-              seenCourses.set(classroomId, { id: classroomId, name: courseName, courseSign });
+              seenCourses.set(classroomId, { id: classroomId, name: courseName, courseSign, term });
             }
           } catch {}
         }
@@ -179,8 +179,14 @@ export function getMockResponse(method: string, urlStr: string): { status: numbe
 }
 
 /**
- * Returns all detected courses from the parsed HAR files.
+ * Returns all detected courses from the parsed HAR files, optionally filtering by active semesters.
  */
-export function getAvailableHarCourses() {
-  return Array.from(cachedCourses);
+export function getAvailableHarCourses(showArchived: boolean = false) {
+  const allCourses = Array.from(cachedCourses);
+  if (showArchived) {
+    return allCourses;
+  }
+  // Term 202502 represents the active ongoing Spring 2026 term.
+  // We keep courses belonging to "latest" or "202502"
+  return allCourses.filter(c => c.term === "latest" || c.term === "202502");
 }
