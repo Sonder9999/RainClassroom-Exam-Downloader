@@ -63,4 +63,24 @@ describe("Downloader Queue and Problem Extraction Tests", () => {
     const body = await res.json() as { success: boolean };
     expect(body.success).toBe(true);
   });
+
+  test("should download exam in offline mode", async () => {
+    const classroomId = "29287752"; // 计算机图形学
+    const lessonId = "4327178";
+    const courseName = "计算机图形学";
+    const lessonIndex = 1;
+    const lessonTitle = "CG-6&7";
+
+    // Run the download process directly with leafType = 5
+    await downloadLesson(classroomId, lessonId, courseName, lessonIndex, lessonTitle, 5);
+
+    // Verify md file exists
+    const lessonDir = join(process.cwd(), testDownloadDir, courseName, "01_CG-6&7");
+    const mdFile = join(lessonDir, "CG-6&7.md");
+    const mdExists = await fs.stat(mdFile).then(() => true).catch(() => false);
+    expect(mdExists).toBe(true);
+
+    const content = await fs.readFile(mdFile, "utf-8");
+    expect(content).toContain("考试详情: CG-6&7");
+  });
 });

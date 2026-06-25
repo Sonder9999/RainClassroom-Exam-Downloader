@@ -16,9 +16,12 @@ const offlineSwitch = document.getElementById("offline-switch");
 const offlineBanner = document.getElementById("offline-banner");
 const courseSelect = document.getElementById("course-select");
 const chaptersList = document.getElementById("chapters-list");
+const coursesGrid = document.getElementById("courses-grid");
+const selectedCourseTitle = document.getElementById("selected-course-title");
 
 let socket = null;
 let currentOfflineMode = false;
+let currentSelectedCourseName = "";
 
 // Initialize Theme
 function initTheme() {
@@ -110,31 +113,76 @@ function connectAuthWebSocket() {
   };
 }
 
-// Populate Courses Dropdown
+// Render Widescreen Course Card Grid
+function renderCourseGrid(courses) {
+  coursesGrid.innerHTML = "";
+  if (courses.length === 0) {
+    coursesGrid.innerHTML = '<div class="placeholder-text">暂无课程数据，请检查设置</div>';
+    return;
+  }
+
+  // Curated premium gradients matching Rain Classroom card styles
+  const gradients = [
+    "linear-gradient(135deg, #f97316 0%, #ea580c 100%)", // Orange-Red
+    "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)", // Blue
+    "linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)", // Purple
+    "linear-gradient(135deg, #10b981 0%, #059669 100%)", // Green
+    "linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)", // Cyan
+  ];
+
+  courses.forEach((course, index) => {
+    const card = document.createElement("div");
+    card.className = "course-card";
+    card.setAttribute("data-id", course.id);
+    card.setAttribute("data-sign", course.courseSign);
+
+    const grad = gradients[index % gradients.length];
+    const isSpring2026 = course.term === "202502";
+    const termLabel = isSpring2026 ? "2026春-23-1-2计科" : course.term;
+
+    card.innerHTML = `
+      <div class="course-card-header" style="background: ${grad};">
+        <span style="font-size: 0.75rem; opacity: 0.9; font-weight: 500;">${termLabel}</span>
+        <span style="font-size: 1rem; opacity: 0.8;">🏫</span>
+      </div>
+      <div class="course-card-body">
+        <div class="course-card-name" title="${course.name}">${course.name}</div>
+        <div class="course-card-meta">
+          <span>进入课程大纲</span>
+          <span style="font-weight: 600; color: var(--primary);">→</span>
+        </div>
+      </div>
+    `;
+
+    card.addEventListener("click", () => {
+      // De-select all
+      document.querySelectorAll(".course-card").forEach(c => c.classList.remove("active"));
+      card.classList.add("active");
+
+      // Load chapter outline
+      const classroomId = course.id;
+      const sign = course.courseSign || "";
+      currentSelectedCourseName = course.name;
+      selectedCourseTitle.textContent = `章节大纲 - ${course.name}`;
+      loadCourseChapters(classroomId, sign);
+    });
+
+    coursesGrid.appendChild(card);
+  });
+}
+
+// Populate Courses List
 async function loadCourses() {
   try {
-    courseSelect.innerHTML = '<option value="">-- 正在读取归档课程 --</option>';
+    coursesGrid.innerHTML = '<div class="spinner" style="margin: 2rem auto;"></div>';
     const res = await fetch("/api/offline/courses");
     if (!res.ok) throw new Error("Failed to fetch HAR courses");
     
     const courses = await res.json();
-    courseSelect.innerHTML = '<option value="">-- 请选择课程 --</option>';
-    
-    if (courses.length === 0) {
-      courseSelect.innerHTML = '<option value="">-- 未检测到 HAR 缓存课程 --</option>';
-      return;
-    }
-
-    courses.forEach(course => {
-      const option = document.createElement("option");
-      option.value = course.id;
-      option.setAttribute("data-sign", course.courseSign);
-      option.textContent = course.name;
-      courseSelect.appendChild(option);
-    });
+    renderCourseGrid(courses);
   } catch (err) {
     console.error("[App] Error loading courses list:", err);
-    courseSelect.innerHTML = '<option value="">-- 加载课程列表失败 --</option>';
+    coursesGrid.innerHTML = '<div class="placeholder-text" style="color: var(--error);">加载课程列表失败</div>';
   }
 }
 
@@ -162,14 +210,22 @@ async function loadCourseChapters(classroomId, sign) {
     const payload = await res.json();
     const chapters = payload.data?.course_chapter || [];
 
-    // Pre-calculate sequential slide lesson indices (leaf_type === 8)
+    // Pre-calculate sequential indices separately for PPT, exams, and homework
     let pptIndex = 0;
+    let examIndex = 0;
+    let hwIndex = 0;
     chapters.forEach(chap => {
       const leaves = chap.section_leaf_list || [];
       leaves.forEach(leaf => {
         if (leaf.leaf_type === 8) {
           pptIndex++;
           leaf.lessonIndex = pptIndex;
+        } else if (leaf.leaf_type === 5) {
+          examIndex++;
+          leaf.lessonIndex = examIndex;
+        } else if (leaf.leaf_type === 9) {
+          hwIndex++;
+          leaf.lessonIndex = hwIndex;
         }
       });
     });
@@ -214,8 +270,25 @@ async function loadCourseChapters(classroomId, sign) {
           dlBtn.textContent = "下载课件";
           dlBtn.onclick = (e) => {
             e.stopPropagation();
-            const courseName = courseSelect.selectedOptions[0].textContent;
-            triggerLessonDownload(classroomId, leaf.id, courseName, leaf.lessonIndex, leaf.name);
+            triggerLessonDownload(classroomId, leaf.id, currentSelectedCourseName, leaf.lessonIndex, leaf.name, 8);
+          };
+          metaDiv.appendChild(dlBtn);
+        } else if (leaf.leaf_type === 5 && leaf.lessonIndex !== undefined) {
+          const dlBtn = document.createElement("button");
+          dlBtn.className = "btn btn-sm btn-download";
+          dlBtn.textContent = "下载考试";
+          dlBtn.onclick = (e) => {
+            e.stopPropagation();
+            triggerLessonDownload(classroomId, leaf.id, currentSelectedCourseName, leaf.lessonIndex, leaf.name, 5);
+          };
+          metaDiv.appendChild(dlBtn);
+        } else if (leaf.leaf_type === 9 && leaf.lessonIndex !== undefined) {
+          const dlBtn = document.createElement("button");
+          dlBtn.className = "btn btn-sm btn-download";
+          dlBtn.textContent = "下载作业";
+          dlBtn.onclick = (e) => {
+            e.stopPropagation();
+            triggerLessonDownload(classroomId, leaf.id, currentSelectedCourseName, leaf.lessonIndex, leaf.name, 9);
           };
           metaDiv.appendChild(dlBtn);
         }
@@ -233,18 +306,6 @@ async function loadCourseChapters(classroomId, sign) {
     chaptersList.innerHTML = '<div class="placeholder-text" style="color: var(--error);">加载大纲数据失败</div>';
   }
 }
-
-// Course selection change handler
-courseSelect.addEventListener("change", () => {
-  const classroomId = courseSelect.value;
-  if (!classroomId) {
-    chaptersList.innerHTML = '<div class="placeholder-text">请先选择一门课程以展示大纲</div>';
-    return;
-  }
-  const option = courseSelect.selectedOptions[0];
-  const sign = option.getAttribute("data-sign") || "";
-  loadCourseChapters(classroomId, sign);
-});
 
 // Check Current Session Status
 async function checkSession() {
@@ -452,7 +513,7 @@ function updateProgressUI(data) {
   }
 }
 
-async function triggerLessonDownload(classroomId, lessonId, courseName, lessonIndex, lessonTitle) {
+async function triggerLessonDownload(classroomId, lessonId, courseName, lessonIndex, lessonTitle, leafType = 8) {
   activeDownloadLessonId = lessonId;
   
   // Setup modal starting UI state
@@ -477,7 +538,8 @@ async function triggerLessonDownload(classroomId, lessonId, courseName, lessonIn
         lessonId,
         courseName,
         lessonIndex,
-        lessonTitle
+        lessonTitle,
+        leafType
       })
     });
     if (!res.ok) {

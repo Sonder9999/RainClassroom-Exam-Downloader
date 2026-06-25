@@ -76,21 +76,163 @@ async function fetchFromYuketang(urlStr: string): Promise<any> {
   return await res.json();
 }
 
+async function resolveLessonId(
+  classroomId: string,
+  leafId: string,
+  leafTitle: string,
+  leafType: number
+): Promise<string> {
+  const config = await loadConfig();
+  
+  if (leafType === 8) {
+    try {
+      const logsUrl = `https://www.yuketang.cn/v2/api/web/logs/learn/${classroomId}?actype=14&page=0&offset=100&sort=-1`;
+      const logsData = await fetchFromYuketang(logsUrl);
+      const activities = logsData.data?.activities || [];
+      const match = activities.find((act: any) => 
+        act.type === 14 && 
+        (act.title === leafTitle || act.title?.trim() === leafTitle.trim())
+      );
+      if (match) {
+        console.log(`[Downloader] Resolved leaf ${leafId} (${leafTitle}) to lessonId ${match.courseware_id} via logs`);
+        return String(match.courseware_id);
+      }
+    } catch (err) {
+      console.warn(`[Downloader] Failed to resolve lessonId via logs for leaf ${leafId}:`, err);
+    }
+  } else if (leafType === 5 || leafType === 9) {
+    try {
+      const logsUrl = `https://www.yuketang.cn/v2/api/web/logs/learn/${classroomId}?actype=-1&page=0&offset=100&sort=-1`;
+      const logsData = await fetchFromYuketang(logsUrl);
+      const activities = logsData.data?.activities || [];
+      const targetTypes = leafType === 5 ? [5] : [4, 9, 2];
+      const match = activities.find((act: any) => 
+        targetTypes.includes(act.type) && 
+        (act.title === leafTitle || act.title?.trim() === leafTitle.trim())
+      );
+      if (match) {
+        console.log(`[Downloader] Resolved exam/homework leaf ${leafId} (${leafTitle}) to courseware_id ${match.courseware_id} via logs`);
+        return String(match.courseware_id);
+      }
+    } catch (err) {
+      console.warn(`[Downloader] Failed to resolve exam/homework ID via logs for leaf ${leafId}:`, err);
+    }
+  }
+  return leafId;
+}
+
 export async function downloadLesson(
   classroomId: string,
   lessonId: string,
   courseName: string,
   lessonIndex: number,
-  lessonTitle: string
+  lessonTitle: string,
+  leafType: number = 8
 ): Promise<void> {
   broadcastProgress(lessonId, 0, "0 KB/s", "pending");
 
   try {
     const config = await loadConfig();
+    const resolvedLessonId = await resolveLessonId(classroomId, lessonId, lessonTitle, leafType);
+
+    if (leafType === 5 || leafType === 9) {
+      const cleanCourse = cleanFilename(courseName);
+      const cleanTitle = cleanFilename(lessonTitle);
+      const targetDir = join(process.cwd(), config.downloadDir, cleanCourse, `${String(lessonIndex).padStart(2, "0")}_${cleanTitle}`);
+      await fs.mkdir(targetDir, { recursive: true });
+
+      let coverData: any = null;
+      let logsMatch: any = null;
+
+      try {
+        const logsUrl = `https://www.yuketang.cn/v2/api/web/logs/learn/${classroomId}?actype=-1&page=0&offset=100&sort=-1`;
+        const logsData = await fetchFromYuketang(logsUrl);
+        const activities = logsData.data?.activities || [];
+        const targetTypes = leafType === 5 ? [5] : [4, 9, 2];
+        logsMatch = activities.find((act: any) => 
+          targetTypes.includes(act.type) && 
+          (act.title === lessonTitle || act.title?.trim() === lessonTitle.trim())
+        );
+      } catch (err) {
+        console.warn(`[Downloader] Failed to fetch logs for cover/attachment resolution:`, err);
+      }
+
+      try {
+        const coverUrl = `https://www.yuketang.cn/v/exam/cover?exam_id=${resolvedLessonId}&classroom_id=${classroomId}`;
+        coverData = await fetchFromYuketang(coverUrl);
+      } catch (err) {
+        console.warn(`[Downloader] Failed to fetch exam cover data:`, err);
+      }
+
+      const title = coverData?.data?.title || logsMatch?.title || lessonTitle;
+      const totalScore = coverData?.data?.total_score ?? logsMatch?.total_score ?? "未知";
+      const problemCount = coverData?.data?.problem_count ?? logsMatch?.problem_count ?? "未知";
+      const deadline = coverData?.data?.deadline 
+        ? new Date(coverData.data.deadline).toLocaleString("zh-CN") 
+        : (logsMatch?.deadline ? new Date(logsMatch.deadline).toLocaleString("zh-CN") : "无");
+      const score = coverData?.data?.result?.score ?? logsMatch?.score ?? "未批改/未提交";
+      const desc = coverData?.data?.description || "无描述";
+
+      const attachments = logsMatch?.attachments || [];
+      const downloadedFiles: string[] = [];
+      if (attachments && attachments.length > 0) {
+        broadcastProgress(lessonId, 30, "0 KB/s", "downloading");
+        for (let i = 0; i < attachments.length; i++) {
+          const att = attachments[i];
+          const attUrl = att.url || att.link;
+          const attName = att.name || `attachment_${i + 1}`;
+          if (attUrl) {
+            try {
+              const cleanAttName = cleanFilename(attName);
+              const destPath = join(targetDir, cleanAttName);
+              if (config.offlineMode) {
+                await fs.writeFile(destPath, `Offline mock content for attachment: ${attName}`);
+              } else {
+                const attRes = await fetch(attUrl);
+                if (attRes.ok) {
+                  const attBuf = Buffer.from(await attRes.arrayBuffer());
+                  await fs.writeFile(destPath, attBuf);
+                  downloadedFiles.push(cleanAttName);
+                }
+              }
+            } catch (err) {
+              console.error(`[Downloader] Failed to download attachment ${attName}:`, err);
+            }
+          }
+        }
+      }
+
+      const mdLines = [
+        `# ${leafType === 5 ? "考试" : "作业"}详情: ${title}`,
+        "",
+        `- **课程名称**: ${courseName}`,
+        `- **截止日期**: ${deadline}`,
+        `- **总分**: ${totalScore}`,
+        `- **题目数量**: ${problemCount}`,
+        `- **我的得分**: ${score}`,
+        `- **描述信息**: ${desc}`,
+        ""
+      ];
+
+      if (downloadedFiles.length > 0) {
+        mdLines.push("## 下载的附件");
+        downloadedFiles.forEach(file => {
+          mdLines.push(`- [${file}](./${encodeURIComponent(file)})`);
+        });
+        mdLines.push("");
+      }
+
+      const mdPath = join(targetDir, `${cleanTitle}.md`);
+      await fs.writeFile(mdPath, mdLines.join("\n"), "utf-8");
+      console.log(`[Downloader] Exam/Homework saved to ${mdPath}`);
+
+      broadcastProgress(lessonId, 100, "0 KB/s", "completed");
+      return;
+    }
+
     const cleanCourse = cleanFilename(courseName);
     const cleanTitle = cleanFilename(lessonTitle);
     
-    // Directory setup
     const courseDir = join(process.cwd(), config.downloadDir, cleanCourse);
     const lessonDir = join(courseDir, `${String(lessonIndex).padStart(2, "0")}_${cleanTitle}`);
     const problemDir = join(courseDir, "problem");
@@ -98,13 +240,20 @@ export async function downloadLesson(
     await fs.mkdir(lessonDir, { recursive: true });
     await fs.mkdir(problemDir, { recursive: true });
 
-    // Fetch review timeline
     let reviewData: any;
     if (config.offlineMode) {
       try {
         const reviewsDir = join(process.cwd(), "docs", "reviews", courseName);
         const files = await fs.readdir(reviewsDir);
-        const match = files.find(file => file.endsWith(`_${lessonId}.json`));
+        let match = files.find(file => file.endsWith(`_${resolvedLessonId}.json`));
+        if (!match) {
+          const prefix = `${String(lessonIndex).padStart(2, "0")}_`;
+          match = files.find(file => file.startsWith(prefix));
+        }
+        if (!match) {
+          const cleanTitlePart = cleanFilename(lessonTitle);
+          match = files.find(file => file.includes(cleanTitlePart));
+        }
         if (match) {
           const fileData = await fs.readFile(join(reviewsDir, match), "utf-8");
           reviewData = JSON.parse(fileData);
@@ -113,12 +262,12 @@ export async function downloadLesson(
           throw new Error("No matching file");
         }
       } catch (err) {
-        console.warn(`[Offline Downloader] Offline review file search failed for ${courseName} (lessonId: ${lessonId}), falling back to HAR:`, err);
-        const reviewUrl = `https://www.yuketang.cn/api/v3/classroom-report/student/review?lesson_id=${lessonId}`;
+        console.warn(`[Offline Downloader] Offline review file search failed for ${courseName} (lessonId: ${resolvedLessonId}), falling back to HAR:`, err);
+        const reviewUrl = `https://www.yuketang.cn/api/v3/classroom-report/student/review?lesson_id=${resolvedLessonId}`;
         reviewData = await fetchFromYuketang(reviewUrl);
       }
     } else {
-      const reviewUrl = `https://www.yuketang.cn/api/v3/classroom-report/student/review?lesson_id=${lessonId}`;
+      const reviewUrl = `https://www.yuketang.cn/api/v3/classroom-report/student/review?lesson_id=${resolvedLessonId}`;
       reviewData = await fetchFromYuketang(reviewUrl);
     }
     const timeline = reviewData.data?.timelineList || [];

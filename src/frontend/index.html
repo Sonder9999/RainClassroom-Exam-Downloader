@@ -99,20 +99,27 @@
         
         <div class="dashboard-body">
           <!-- Console Tab Content -->
-          <div id="console-tab-content">
-            <!-- Course Selector -->
-            <div class="course-selector-wrapper">
-              <label for="course-select">选择课程：</label>
-              <select id="course-select" class="select-control">
-                <option value="">-- 加载课程中 --</option>
+          <div id="console-tab-content" class="console-layout">
+            <!-- Left Side: Widescreen Course Cards list -->
+            <div class="console-left">
+              <div class="section-title">
+                <h3 style="margin-bottom: 0.5rem; font-size: 1rem; font-weight: 600;">我听的课</h3>
+              </div>
+              <div id="courses-grid" class="courses-grid">
+                <div class="placeholder-text">正在读取课程列表...</div>
+              </div>
+              <select id="course-select" class="select-control hidden">
+                <option value="">-- 请选择课程 --</option>
               </select>
             </div>
 
-            <!-- Chapters and Lessons List -->
-            <div class="chapters-wrapper">
-              <h3>章节大纲</h3>
-              <div id="chapters-list" class="chapters-list-container">
-                <div class="placeholder-text">请先选择一门课程以展示大纲</div>
+            <!-- Right Side: Outline details list -->
+            <div class="console-right">
+              <div class="chapters-wrapper">
+                <h3 id="selected-course-title">章节大纲</h3>
+                <div id="chapters-list" class="chapters-list-container">
+                  <div class="placeholder-text">请在左侧选择一门课程以展示大纲</div>
+                </div>
               </div>
             </div>
           </div>
