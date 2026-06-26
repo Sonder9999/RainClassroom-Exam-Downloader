@@ -1,5 +1,5 @@
 import { promises as fs } from "fs";
-import { join } from "path";
+import { join, relative } from "path";
 
 export interface HarEntry {
   request: {
@@ -38,6 +38,27 @@ const harPathnameIndex = new Map<string, CachedResponse[]>();
 const cachedCourses = new Set<{ id: string; name: string; courseSign: string; term: string }>();
 
 /**
+ * Recursively retrieves all .har files in a directory.
+ */
+async function getHarFilesRecursive(dir: string): Promise<string[]> {
+  let results: string[] = [];
+  try {
+    const list = await fs.readdir(dir, { withFileTypes: true });
+    for (const file of list) {
+      const filePath = join(dir, file.name);
+      if (file.isDirectory()) {
+        results = results.concat(await getHarFilesRecursive(filePath));
+      } else if (file.name.endsWith(".har")) {
+        results.push(filePath);
+      }
+    }
+  } catch (err) {
+    // Directory might not exist or error reading
+  }
+  return results;
+}
+
+/**
  * Scans the docs/ directory and loads all .har files into memory.
  */
 export async function initHarIndex(): Promise<void> {
@@ -46,23 +67,23 @@ export async function initHarIndex(): Promise<void> {
   cachedCourses.clear();
 
   try {
-    const files = await fs.readdir(HAR_DIR);
-    const harFiles = files.filter(f => f.endsWith(".har"));
-    console.log(`[HAR] Found ${harFiles.length} HAR files:`, harFiles);
+    const harFiles = await getHarFilesRecursive(HAR_DIR);
+    console.log(`[HAR] Found ${harFiles.length} HAR files:`, harFiles.map(f => relative(HAR_DIR, f)));
 
     const seenCourses = new Map<string, { id: string; name: string; courseSign: string; term: string }>();
 
-    for (const file of harFiles) {
-      const filePath = join(HAR_DIR, file);
-      console.log(`[HAR] Parsing file: ${file}`);
+    for (const filePath of harFiles) {
+      const fileRelativePath = relative(HAR_DIR, filePath);
+      console.log(`[HAR] Parsing file: ${fileRelativePath}`);
       
       const fileData = await fs.readFile(filePath, "utf-8");
       const har: HarJson = JSON.parse(fileData);
       
       if (!har.log || !har.log.entries) {
-        console.warn(`[HAR] Invalid HAR structure in file: ${file}`);
+        console.warn(`[HAR] Invalid HAR structure in file: ${fileRelativePath}`);
         continue;
       }
+
 
       let entriesCount = 0;
       for (const entry of har.log.entries) {
@@ -113,7 +134,7 @@ export async function initHarIndex(): Promise<void> {
           } catch {}
         }
       }
-      console.log(`[HAR] Successfully indexed ${entriesCount} entries from ${file}`);
+      console.log(`[HAR] Successfully indexed ${entriesCount} entries from ${fileRelativePath}`);
     }
 
     // Populate unique courses

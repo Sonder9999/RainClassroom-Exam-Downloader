@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import { join } from "path";
-import { loadConfig } from "./config";
+import { loadConfig, updateConfig } from "./config";
 import { getMockResponse } from "./har-parser";
 
 // 1x1 transparent/black pixel JPEG base64 fallback for offline mode
@@ -74,6 +74,89 @@ async function fetchFromYuketang(urlStr: string): Promise<any> {
     throw new Error(`Failed to fetch from YuKeTang, status: ${res.status}`);
   }
   return await res.json();
+}
+
+async function refreshXuetangxAuth(classroomId: string, examId: string): Promise<string> {
+  const config = await loadConfig();
+  if (config.offlineMode) {
+    return "";
+  }
+
+  const cookies = config.cookies;
+  const cookieStr = [
+    `sessionid=${cookies.sessionid}`,
+    `csrftoken=${cookies.csrftoken}`,
+    `xtbz=${cookies.xtbz}`,
+    `university_id=${cookies.university_id}`,
+    `platform_id=${cookies.platform_id}`
+  ];
+  if (cookies._cf_bm) {
+    cookieStr.push(`_cf_bm=${cookies._cf_bm}`);
+  }
+
+  // 1. POST to gen_token
+  const genTokenUrl = "https://www.yuketang.cn/v/exam/gen_token";
+  const genTokenRes = await fetch(genTokenUrl, {
+    method: "POST",
+    headers: {
+      "cookie": cookieStr.join("; "),
+      "x-csrftoken": cookies.csrftoken || "",
+      "content-type": "application/json",
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "referer": `https://www.yuketang.cn/v2/web/exam/${classroomId}/${examId}`
+    },
+    body: JSON.stringify({
+      exam_id: Number(examId),
+      classroom_id: Number(classroomId)
+    })
+  });
+
+  if (!genTokenRes.ok) {
+    throw new Error(`Failed to generate token from Rain Classroom, status: ${genTokenRes.status}`);
+  }
+
+  const genTokenJson = await genTokenRes.json();
+  if (!genTokenJson.success) {
+    throw new Error(`gen_token API returned failure: ${genTokenJson.msg || "unknown error"}`);
+  }
+
+  const { token, user_id, exam_host } = genTokenJson.data;
+
+  // 2. GET to login
+  const nextUrl = `${exam_host}/result/${examId}?isFrom=2`;
+  const loginUrl = `${exam_host}/login?exam_id=${examId}&user_id=${user_id}&crypt=${encodeURIComponent(token)}&next=${encodeURIComponent(nextUrl)}&language=zh`;
+
+  const loginRes = await fetch(loginUrl, {
+    method: "GET",
+    headers: {
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    },
+    redirect: "manual"
+  });
+
+  // Extract set-cookie headers
+  const setCookieHeaders = loginRes.headers.getSetCookie();
+  let xAccessToken = "";
+  for (const cookieStr of setCookieHeaders) {
+    const [part] = cookieStr.split(";");
+    const [key, val] = part.split("=");
+    if (key && val && key.trim() === "x_access_token") {
+      xAccessToken = val.trim();
+    }
+  }
+
+  if (!xAccessToken) {
+    throw new Error(`Did not receive x_access_token from Xuetangx login redirect`);
+  }
+
+  // 3. Update configuration
+  await updateConfig({
+    cookies: {
+      x_access_token: xAccessToken
+    }
+  });
+
+  return xAccessToken;
 }
 
 async function fetchFromXuetangx(urlStr: string): Promise<any> {
@@ -245,6 +328,14 @@ export async function downloadLesson(
       const cleanTitle = cleanFilename(lessonTitle);
       const targetDir = join(process.cwd(), config.downloadDir, cleanCourse, `${String(lessonIndex).padStart(2, "0")}_${cleanTitle}`);
       await fs.mkdir(targetDir, { recursive: true });
+
+      // Refresh XuetangX authentication automatically
+      try {
+        console.log(`[Downloader] Refreshing XuetangX auth automatically for exam ${resolvedLessonId} in classroom ${classroomId}...`);
+        await refreshXuetangxAuth(classroomId, resolvedLessonId);
+      } catch (authErr: any) {
+        console.warn(`[Downloader] Automatic XuetangX auth refresh failed:`, authErr.message || authErr);
+      }
 
       let coverData: any = null;
       let logsMatch: any = null;
