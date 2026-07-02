@@ -167,17 +167,20 @@ export function getMockResponse(method: string, urlStr: string): { status: numbe
     }
 
     // Key parameters to compare
-    const keysToMatch = ["classroom_id", "cid", "lesson_id", "exam_id"];
+    const keysToMatch = ["classroom_id", "cid", "lesson_id", "exam_id", "presentation_id", "presentationId"];
 
     // Find first entry matching query key parameters
     for (const entry of entries) {
       let isMatch = true;
       for (const key of keysToMatch) {
         const reqVal = urlObj.searchParams.get(key);
-        // Normalize alias for classroom_id / cid
+        // Normalize alias for classroom_id / cid, and presentation_id / presentationId
         let cachedVal = entry.queryParams[key];
-        if (!cachedVal && key === "classroom_id") cachedVal = entry.queryParams["cid"];
-        if (!cachedVal && key === "cid") cachedVal = entry.queryParams["classroom_id"];
+        if (key === "classroom_id" || key === "cid") {
+          cachedVal = entry.queryParams["classroom_id"] || entry.queryParams["cid"];
+        } else if (key === "presentation_id" || key === "presentationId") {
+          cachedVal = entry.queryParams["presentation_id"] || entry.queryParams["presentationId"];
+        }
 
         if (reqVal && cachedVal && reqVal !== cachedVal) {
           isMatch = false;

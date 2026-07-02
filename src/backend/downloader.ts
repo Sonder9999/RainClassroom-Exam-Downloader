@@ -568,106 +568,153 @@ export async function downloadLesson(
     }
     const timeline = reviewData.data?.timelineList || [];
 
-    // Group and de-duplicate slides by index
-    const slidesMap = new Map<number, { cover: string; hasProblem: boolean }>();
+    // Group and de-duplicate slides by presentationId and index
+    const presentationsMap = new Map<string, Map<number, { cover: string; hasProblem: boolean }>>();
     for (const item of timeline) {
       if (item.type === "slide") {
+        const presId = item.presentationId || item.presentation_id || "default";
         const idx = item.index;
         const cover = item.cover;
         if (idx !== undefined && cover) {
-          slidesMap.set(idx, { cover, hasProblem: !!item.hasProblem });
+          if (!presentationsMap.has(presId)) {
+            presentationsMap.set(presId, new Map());
+          }
+          presentationsMap.get(presId)!.set(idx, { cover, hasProblem: !!item.hasProblem });
         }
       }
     }
 
-    if (slidesMap.size === 0) {
+    if (presentationsMap.size === 0) {
       console.warn(`[Downloader] Lesson ${lessonId} has no slides.`);
       broadcastProgress(lessonId, 100, "0 KB/s", "completed");
       return;
     }
 
-    const sortedIndices = Array.from(slidesMap.keys()).sort((a, b) => a - b);
-    const totalSlides = sortedIndices.length;
+    // Fetch presentation titles if we have multiple presentations
+    const presentationTitles = new Map<string, string>();
+    for (const presId of presentationsMap.keys()) {
+      if (presId === "default") continue;
+      try {
+        const url = `https://www.yuketang.cn/api/v3/lesson-summary/student/presentation?lesson_id=${resolvedLessonId}&presentation_id=${presId}`;
+        const presData = await fetchFromYuketang(url);
+        const title = presData.data?.presentation?.title;
+        if (title) {
+          presentationTitles.set(presId, title);
+        }
+      } catch (err: any) {
+        console.warn(`[Downloader] Could not fetch presentation details for ${presId}:`, err.message || err);
+      }
+    }
 
-    // Filter problems and sort them to get sequential numbering
-    const problemSlides = sortedIndices
-      .filter(idx => slidesMap.get(idx)!.hasProblem)
-      .map((idx, pIdx) => ({
-        slideIndex: idx,
-        cover: slidesMap.get(idx)!.cover,
-        problemNumber: pIdx + 1
-      }));
+    const presEntries = Array.from(presentationsMap.entries());
+    const isMultiPres = presEntries.length > 1;
 
-    broadcastProgress(lessonId, 0, "0 KB/s", "downloading");
+    // Collect all download tasks
+    const tasks: (() => Promise<void>)[] = [];
+    let totalSlidesCount = 0;
+    for (const [_, slidesMap] of presEntries) {
+      totalSlidesCount += slidesMap.size;
+    }
 
     let completedCount = 0;
     let totalBytes = 0;
     const startTime = Date.now();
 
-    // Map each slide index to a task
-    const tasks = sortedIndices.map(sIdx => async () => {
-      const slide = slidesMap.get(sIdx)!;
-      const slideFileName = join(lessonDir, `${String(sIdx).padStart(3, "0")}.jpg`);
-      
-      let alreadyExists = false;
-      try {
-        const stat = await fs.stat(slideFileName);
-        if (stat.size > 0) {
-          alreadyExists = true;
-          totalBytes += stat.size;
-        }
-      } catch {}
+    for (let presIdx = 0; presIdx < presEntries.length; presIdx++) {
+      const [presId, slidesMap] = presEntries[presIdx];
+      const sortedIndices = Array.from(slidesMap.keys()).sort((a, b) => a - b);
 
-      let imgBuffer: Buffer | null = null;
-      if (!alreadyExists) {
-        if (config.offlineMode) {
-          imgBuffer = MOCK_JPEG;
-        } else {
-          const imgRes = await fetch(slide.cover, {
-            headers: {
-              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      // Filter problems and sort them to get sequential numbering for this presentation
+      const problemSlides = sortedIndices
+        .filter(idx => slidesMap.get(idx)!.hasProblem)
+        .map((idx, pIdx) => ({
+          slideIndex: idx,
+          cover: slidesMap.get(idx)!.cover,
+          problemNumber: pIdx + 1
+        }));
+
+      // Determine the directory for this presentation
+      let targetDir = lessonDir;
+      if (isMultiPres) {
+        const presTitle = presentationTitles.get(presId) || "课件";
+        const subFolderName = cleanFilename(`${presTitle}_${presId}`);
+        targetDir = join(lessonDir, subFolderName);
+        await fs.mkdir(targetDir, { recursive: true });
+      }
+
+      // Add task for each slide of this presentation
+      for (const sIdx of sortedIndices) {
+        tasks.push(async () => {
+          const slide = slidesMap.get(sIdx)!;
+          const slideFileName = join(targetDir, `${String(sIdx).padStart(3, "0")}.jpg`);
+          
+          let alreadyExists = false;
+          try {
+            const stat = await fs.stat(slideFileName);
+            if (stat.size > 0) {
+              alreadyExists = true;
+              totalBytes += stat.size;
             }
-          });
-          if (!imgRes.ok) {
-            throw new Error(`Failed to download slide image from ${slide.cover}`);
+          } catch {}
+
+          let imgBuffer: Buffer | null = null;
+          if (!alreadyExists) {
+            if (config.offlineMode) {
+              imgBuffer = MOCK_JPEG;
+            } else {
+              const imgRes = await fetch(slide.cover, {
+                headers: {
+                  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }
+              });
+              if (!imgRes.ok) {
+                throw new Error(`Failed to download slide image from ${slide.cover}`);
+              }
+              imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+            }
+            await fs.writeFile(slideFileName, imgBuffer);
+            totalBytes += imgBuffer.length;
           }
-          imgBuffer = Buffer.from(await imgRes.arrayBuffer());
-        }
-        await fs.writeFile(slideFileName, imgBuffer);
-        totalBytes += imgBuffer.length;
+
+          // If it is a problem slide, copy/save it to the problem folder
+          const pSlide = problemSlides.find(p => p.slideIndex === sIdx);
+          if (pSlide) {
+            let problemFileName: string;
+            if (isMultiPres) {
+              problemFileName = join(problemDir, `${String(lessonIndex).padStart(2, "0")}_pres${presIdx + 1}_${String(pSlide.problemNumber).padStart(2, "0")}.jpg`);
+            } else {
+              problemFileName = join(problemDir, `${String(lessonIndex).padStart(2, "0")}_${String(pSlide.problemNumber).padStart(2, "0")}.jpg`);
+            }
+
+            let pAlreadyExists = false;
+            try {
+              const stat = await fs.stat(problemFileName);
+              if (stat.size > 0) {
+                pAlreadyExists = true;
+              }
+            } catch {}
+
+            if (!pAlreadyExists) {
+              if (alreadyExists) {
+                await fs.copyFile(slideFileName, problemFileName);
+              } else if (imgBuffer) {
+                await fs.writeFile(problemFileName, imgBuffer);
+              }
+            }
+          }
+
+          completedCount++;
+          const elapsedSec = (Date.now() - startTime) / 1000 || 0.1;
+          const rawSpeed = (totalBytes / 1024) / elapsedSec; // KB/s
+          const speedStr = rawSpeed > 1024 
+            ? `${(rawSpeed / 1024).toFixed(1)} MB/s` 
+            : `${rawSpeed.toFixed(0)} KB/s`;
+          
+          const percent = Math.round((completedCount / totalSlidesCount) * 100);
+          broadcastProgress(lessonId, percent, speedStr, "downloading");
+        });
       }
-
-      // If it is a problem slide, copy/save it to the problem folder
-      const pSlide = problemSlides.find(p => p.slideIndex === sIdx);
-      if (pSlide) {
-        const problemFileName = join(problemDir, `${String(lessonIndex).padStart(2, "0")}_${String(pSlide.problemNumber).padStart(2, "0")}.jpg`);
-        let pAlreadyExists = false;
-        try {
-          const stat = await fs.stat(problemFileName);
-          if (stat.size > 0) {
-            pAlreadyExists = true;
-          }
-        } catch {}
-
-        if (!pAlreadyExists) {
-          if (alreadyExists) {
-            await fs.copyFile(slideFileName, problemFileName);
-          } else if (imgBuffer) {
-            await fs.writeFile(problemFileName, imgBuffer);
-          }
-        }
-      }
-
-      completedCount++;
-      const elapsedSec = (Date.now() - startTime) / 1000 || 0.1;
-      const rawSpeed = (totalBytes / 1024) / elapsedSec; // KB/s
-      const speedStr = rawSpeed > 1024 
-        ? `${(rawSpeed / 1024).toFixed(1)} MB/s` 
-        : `${rawSpeed.toFixed(0)} KB/s`;
-      
-      const percent = Math.round((completedCount / totalSlides) * 100);
-      broadcastProgress(lessonId, percent, speedStr, "downloading");
-    });
+    }
 
     // Run tasks with concurrency limit
     const concurrencyLimit = config.concurrency || 5;

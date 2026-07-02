@@ -83,4 +83,46 @@ describe("Downloader Queue and Problem Extraction Tests", () => {
     const content = await fs.readFile(mdFile, "utf-8");
     expect(content).toContain("考试详情: CG-6&7");
   });
+
+  test("should download multiple presentations in offline mode without conflict", async () => {
+    const classroomId = "29287752";
+    const lessonId = "1647680549202234496";
+    const courseName = "计算机图形学";
+    const lessonIndex = 3;
+    const lessonTitle = "计算机图形学 Computer Graphics-0323";
+
+    // Run the download process directly
+    await downloadLesson(classroomId, lessonId, courseName, lessonIndex, lessonTitle);
+
+    // Verify multiple presentation subfolders exist
+    const lessonDir = join(process.cwd(), testDownloadDir, courseName, "03_计算机图形学 Computer Graphics-0323");
+    
+    // We expect two subdirectories for presentations:
+    // 1. "计算机图形学 Computer Graphics_1647680688570567680"
+    // 2. "计算机图形学 Computer Graphics_1647712743136259840"
+    const subfolder1 = join(lessonDir, "计算机图形学 Computer Graphics_1647680688570567680");
+    const subfolder2 = join(lessonDir, "计算机图形学 Computer Graphics_1647712743136259840");
+    
+    const subfolder1Exists = await fs.stat(subfolder1).then(() => true).catch(() => false);
+    const subfolder2Exists = await fs.stat(subfolder2).then(() => true).catch(() => false);
+    
+    expect(subfolder1Exists).toBe(true);
+    expect(subfolder2Exists).toBe(true);
+
+    // Verify slide files exist in each subfolder
+    const files1 = await fs.readdir(subfolder1);
+    const files2 = await fs.readdir(subfolder2);
+    expect(files1.length).toBeGreaterThan(0);
+    expect(files2.length).toBeGreaterThan(0);
+
+    // Verify problems folder and extracted problems exist with pres prefix
+    const problemDir = join(process.cwd(), testDownloadDir, courseName, "problem");
+    const prob1 = join(problemDir, "03_pres1_01.jpg");
+    const prob2 = join(problemDir, "03_pres2_01.jpg");
+    const prob1Exists = await fs.stat(prob1).then(() => true).catch(() => false);
+    const prob2Exists = await fs.stat(prob2).then(() => true).catch(() => false);
+
+    expect(prob1Exists).toBe(true);
+    expect(prob2Exists).toBe(true);
+  });
 });
