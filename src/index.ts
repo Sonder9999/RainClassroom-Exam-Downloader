@@ -34,6 +34,8 @@ export const app = new Elysia()
       downloadDir: activeConfig.downloadDir,
       concurrency: activeConfig.concurrency,
       showArchived: activeConfig.showArchived,
+      autoConvertPdf: activeConfig.autoConvertPdf,
+      autoConvertPpt: activeConfig.autoConvertPpt,
       authenticated: !!activeConfig.cookies.sessionid
     };
   })
@@ -49,6 +51,8 @@ export const app = new Elysia()
         downloadDir: updated.downloadDir,
         concurrency: updated.concurrency,
         showArchived: updated.showArchived,
+        autoConvertPdf: updated.autoConvertPdf,
+        autoConvertPpt: updated.autoConvertPpt,
         authenticated: !!updated.cookies.sessionid
       }
     };

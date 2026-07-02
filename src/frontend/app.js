@@ -344,6 +344,10 @@ async function checkSession() {
       document.getElementById("setting-download-dir").value = config.downloadDir || "downloads";
       document.getElementById("setting-concurrency").value = config.concurrency || 5;
       document.getElementById("setting-show-archived").checked = !!config.showArchived;
+      const pdfEl = document.getElementById("setting-auto-convert-pdf");
+      if (pdfEl) pdfEl.checked = !!config.autoConvertPdf;
+      const pptEl = document.getElementById("setting-auto-convert-ppt");
+      if (pptEl) pptEl.checked = !!config.autoConvertPpt;
 
       // Populate xuetangx cookies if stored
       const storedCookies = [];
@@ -437,14 +441,7 @@ tabSettings.addEventListener("click", () => {
   consoleTabContent.classList.add("hidden");
 });
 
-// Label click helper for show-archived switch
-const settingShowArchivedLabel = document.getElementById("setting-show-archived-label");
-const settingShowArchived = document.getElementById("setting-show-archived");
-settingShowArchivedLabel.addEventListener("click", (e) => {
-  if (e.target !== settingShowArchived) {
-    settingShowArchived.checked = !settingShowArchived.checked;
-  }
-});
+
 
 // Save settings button handler
 const btnSaveSettings = document.getElementById("btn-save-settings");
@@ -452,6 +449,10 @@ btnSaveSettings.addEventListener("click", async () => {
   const downloadDir = document.getElementById("setting-download-dir").value.trim();
   const concurrency = parseInt(document.getElementById("setting-concurrency").value) || 5;
   const showArchived = document.getElementById("setting-show-archived").checked;
+  const autoConvertPdfEl = document.getElementById("setting-auto-convert-pdf");
+  const autoConvertPdf = autoConvertPdfEl ? autoConvertPdfEl.checked : false;
+  const autoConvertPptEl = document.getElementById("setting-auto-convert-ppt");
+  const autoConvertPpt = autoConvertPptEl ? autoConvertPptEl.checked : false;
 
   const xuetangxCookieRaw = document.getElementById("setting-xuetangx-cookie").value.trim();
   const xuetangxCookies = {
@@ -486,6 +487,8 @@ btnSaveSettings.addEventListener("click", async () => {
         downloadDir,
         concurrency,
         showArchived,
+        autoConvertPdf,
+        autoConvertPpt,
         cookies: xuetangxCookies
       })
     });

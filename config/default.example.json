@@ -5,6 +5,8 @@
   "concurrency": 5,
   "offlineMode": false,
   "showArchived": false,
+  "autoConvertPdf": false,
+  "autoConvertPpt": false,
   "yuketangUrl": "https://www.yuketang.cn",
   "yuketangWsUrl": "wss://www.yuketang.cn/wsapp/",
   "cookies": {

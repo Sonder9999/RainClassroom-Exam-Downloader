@@ -2,6 +2,8 @@ import { promises as fs } from "fs";
 import { join } from "path";
 import { loadConfig, updateConfig } from "./config";
 import { getMockResponse } from "./har-parser";
+import { PDFDocument } from "pdf-lib";
+import pptxgen from "pptxgenjs";
 
 // 1x1 transparent/black pixel JPEG base64 fallback for offline mode
 const MOCK_JPEG = Buffer.from(
@@ -528,15 +530,13 @@ export async function downloadLesson(
 
     const cleanCourse = cleanFilename(courseName);
     const cleanTitle = cleanFilename(lessonTitle);
-    
     const courseDir = join(process.cwd(), config.downloadDir, cleanCourse);
-    const lessonDir = join(courseDir, `${String(lessonIndex).padStart(2, "0")}_${cleanTitle}`);
     const problemDir = join(courseDir, "problem");
-    
-    await fs.mkdir(lessonDir, { recursive: true });
     await fs.mkdir(problemDir, { recursive: true });
 
-    let reviewData: any;
+    // 1. Resolve dateStr first
+    let dateStr = "";
+    let offlineReviewMatch = "";
     if (config.offlineMode) {
       try {
         const reviewsDir = join(process.cwd(), "docs", "reviews", courseName);
@@ -551,14 +551,61 @@ export async function downloadLesson(
           match = files.find(file => file.includes(cleanTitlePart));
         }
         if (match) {
-          const fileData = await fs.readFile(join(reviewsDir, match), "utf-8");
-          reviewData = JSON.parse(fileData);
-          console.log(`[Offline Downloader] Loaded timeline from offline review file: ${match}`);
-        } else {
-          throw new Error("No matching file");
+          offlineReviewMatch = match;
+          const dateMatch = match.match(/^\d+_(\d{8})_\d+_/);
+          if (dateMatch) {
+            dateStr = dateMatch[1];
+          }
         }
-      } catch (err) {
-        console.warn(`[Offline Downloader] Offline review file search failed for ${courseName} (lessonId: ${resolvedLessonId}), falling back to HAR:`, err);
+      } catch {}
+    }
+
+    if (!dateStr) {
+      try {
+        const infoUrl = `https://www.yuketang.cn/api/v3/classroom-report/student/lesson-info?lesson_id=${resolvedLessonId}`;
+        const infoData = await fetchFromYuketang(infoUrl);
+        const startTimestamp = infoData.data?.start;
+        if (startTimestamp) {
+          const startDate = new Date(startTimestamp);
+          const yyyy = startDate.getFullYear();
+          const mm = String(startDate.getMonth() + 1).padStart(2, "0");
+          const dd = String(startDate.getDate()).padStart(2, "0");
+          dateStr = `${yyyy}${mm}${dd}`;
+        }
+      } catch (err: any) {
+        console.warn(`[Downloader] Could not fetch lesson-info for date:`, err.message || err);
+      }
+    }
+
+    if (!dateStr && lessonTitle) {
+      const titleMatch = lessonTitle.match(/[-_](\d{4})/);
+      if (titleMatch) {
+        dateStr = `2026${titleMatch[1]}`;
+      }
+    }
+
+    if (!dateStr) {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      dateStr = `${yyyy}${mm}${dd}`;
+    }
+
+    // 2. Fetch timeline data
+    let reviewData: any;
+    if (config.offlineMode) {
+      if (offlineReviewMatch) {
+        try {
+          const reviewsDir = join(process.cwd(), "docs", "reviews", courseName);
+          const fileData = await fs.readFile(join(reviewsDir, offlineReviewMatch), "utf-8");
+          reviewData = JSON.parse(fileData);
+          console.log(`[Offline Downloader] Loaded timeline from offline review file: ${offlineReviewMatch}`);
+        } catch (err) {
+          const reviewUrl = `https://www.yuketang.cn/api/v3/classroom-report/student/review?lesson_id=${resolvedLessonId}`;
+          reviewData = await fetchFromYuketang(reviewUrl);
+        }
+      } else {
         const reviewUrl = `https://www.yuketang.cn/api/v3/classroom-report/student/review?lesson_id=${resolvedLessonId}`;
         reviewData = await fetchFromYuketang(reviewUrl);
       }
@@ -590,29 +637,28 @@ export async function downloadLesson(
       return;
     }
 
-    // Fetch presentation titles if we have multiple presentations
-    const presentationTitles = new Map<string, string>();
-    for (const presId of presentationsMap.keys()) {
-      if (presId === "default") continue;
-      try {
-        const url = `https://www.yuketang.cn/api/v3/lesson-summary/student/presentation?lesson_id=${resolvedLessonId}&presentation_id=${presId}`;
-        const presData = await fetchFromYuketang(url);
-        const title = presData.data?.presentation?.title;
-        if (title) {
-          presentationTitles.set(presId, title);
+    // Determine the order of presentations based on display sequence
+    const presOrder: string[] = [];
+    for (const item of timeline) {
+      if (item.type === "slide") {
+        const presId = item.presentationId || item.presentation_id || "default";
+        if (!presOrder.includes(presId)) {
+          presOrder.push(presId);
         }
-      } catch (err: any) {
-        console.warn(`[Downloader] Could not fetch presentation details for ${presId}:`, err.message || err);
+      }
+    }
+    for (const presId of presentationsMap.keys()) {
+      if (!presOrder.includes(presId)) {
+        presOrder.push(presId);
       }
     }
 
-    const presEntries = Array.from(presentationsMap.entries());
-    const isMultiPres = presEntries.length > 1;
+    const isMultiPres = presOrder.length > 1;
 
     // Collect all download tasks
     const tasks: (() => Promise<void>)[] = [];
     let totalSlidesCount = 0;
-    for (const [_, slidesMap] of presEntries) {
+    for (const [_, slidesMap] of presentationsMap.entries()) {
       totalSlidesCount += slidesMap.size;
     }
 
@@ -620,8 +666,17 @@ export async function downloadLesson(
     let totalBytes = 0;
     const startTime = Date.now();
 
-    for (let presIdx = 0; presIdx < presEntries.length; presIdx++) {
-      const [presId, slidesMap] = presEntries[presIdx];
+    const downloadedPresentations: {
+      targetDir: string;
+      folderName: string;
+      slidePaths: string[];
+    }[] = [];
+
+    for (let presIdx = 0; presIdx < presOrder.length; presIdx++) {
+      const presId = presOrder[presIdx];
+      const slidesMap = presentationsMap.get(presId);
+      if (!slidesMap) continue;
+
       const sortedIndices = Array.from(slidesMap.keys()).sort((a, b) => a - b);
 
       // Filter problems and sort them to get sequential numbering for this presentation
@@ -633,20 +688,24 @@ export async function downloadLesson(
           problemNumber: pIdx + 1
         }));
 
-      // Determine the directory for this presentation
-      let targetDir = lessonDir;
+      // Determine folder name & directory based on isMultiPres
+      let folderName: string;
       if (isMultiPres) {
-        const presTitle = presentationTitles.get(presId) || "课件";
-        const subFolderName = cleanFilename(`${presTitle}_${presId}`);
-        targetDir = join(lessonDir, subFolderName);
-        await fs.mkdir(targetDir, { recursive: true });
+        folderName = `${String(lessonIndex).padStart(2, "0")}_${cleanCourse}_${dateStr}_${presIdx + 1}`;
+      } else {
+        folderName = `${String(lessonIndex).padStart(2, "0")}_${cleanCourse}_${dateStr}`;
       }
 
-      // Add task for each slide of this presentation
+      const targetDir = join(courseDir, folderName);
+      await fs.mkdir(targetDir, { recursive: true });
+
+      const slidePaths: string[] = [];
       for (const sIdx of sortedIndices) {
+        const slideFileName = join(targetDir, `${String(sIdx).padStart(3, "0")}.jpg`);
+        slidePaths.push(slideFileName);
+
         tasks.push(async () => {
           const slide = slidesMap.get(sIdx)!;
-          const slideFileName = join(targetDir, `${String(sIdx).padStart(3, "0")}.jpg`);
           
           let alreadyExists = false;
           try {
@@ -681,7 +740,7 @@ export async function downloadLesson(
           if (pSlide) {
             let problemFileName: string;
             if (isMultiPres) {
-              problemFileName = join(problemDir, `${String(lessonIndex).padStart(2, "0")}_pres${presIdx + 1}_${String(pSlide.problemNumber).padStart(2, "0")}.jpg`);
+              problemFileName = join(problemDir, `${String(lessonIndex).padStart(2, "0")}_${presIdx + 1}_${String(pSlide.problemNumber).padStart(2, "0")}.jpg`);
             } else {
               problemFileName = join(problemDir, `${String(lessonIndex).padStart(2, "0")}_${String(pSlide.problemNumber).padStart(2, "0")}.jpg`);
             }
@@ -714,11 +773,24 @@ export async function downloadLesson(
           broadcastProgress(lessonId, percent, speedStr, "downloading");
         });
       }
+
+      downloadedPresentations.push({ targetDir, folderName, slidePaths });
     }
 
     // Run tasks with concurrency limit
     const concurrencyLimit = config.concurrency || 5;
     await runWithConcurrency(tasks, concurrencyLimit);
+
+    // Convert slides to PDF/PPTX formats if requested
+    for (const pres of downloadedPresentations) {
+      await convertToPdfAndPpt(
+        pres.targetDir,
+        pres.folderName,
+        pres.slidePaths,
+        !!config.autoConvertPdf,
+        !!config.autoConvertPpt
+      );
+    }
 
     broadcastProgress(lessonId, 100, "0 KB/s", "completed");
   } catch (err: any) {
@@ -744,4 +816,76 @@ async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], limit: number)
   const workers = Array.from({ length: Math.min(limit, tasks.length) }, worker);
   await Promise.all(workers);
   return results;
+}
+
+async function convertToPdfAndPpt(
+  targetDir: string,
+  folderName: string,
+  slidePaths: string[],
+  convertPdf: boolean,
+  convertPpt: boolean
+): Promise<void> {
+  if (!convertPdf && !convertPpt) return;
+
+  console.log(`[Downloader] Starting conversion for ${folderName}: PDF=${convertPdf}, PPT=${convertPpt}`);
+
+  // Read all slide buffers
+  const imgBuffers: Buffer[] = [];
+  for (const path of slidePaths) {
+    try {
+      const buf = await fs.readFile(path);
+      if (buf.length > 0) {
+        imgBuffers.push(buf);
+      }
+    } catch (err) {
+      console.error(`[Downloader] Error reading slide image ${path}:`, err);
+    }
+  }
+
+  if (imgBuffers.length === 0) {
+    console.warn(`[Downloader] No slide images found for conversion in ${targetDir}`);
+    return;
+  }
+
+  // 1. Convert to PDF
+  if (convertPdf) {
+    try {
+      const pdfDoc = await PDFDocument.create();
+      for (const buf of imgBuffers) {
+        const img = await pdfDoc.embedJpg(buf);
+        const page = pdfDoc.addPage([img.width, img.height]);
+        page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+      }
+      const pdfBytes = await pdfDoc.save();
+      const pdfPath = join(targetDir, `${folderName}.pdf`);
+      await fs.writeFile(pdfPath, pdfBytes);
+      console.log(`[Downloader] Saved PDF to ${pdfPath}`);
+    } catch (err: any) {
+      console.error(`[Downloader] Failed to generate PDF for ${folderName}:`, err.message || err);
+    }
+  }
+
+  // 2. Convert to PPTX
+  if (convertPpt) {
+    try {
+      const pptx = new pptxgen();
+      pptx.layout = "LAYOUT_16x9";
+      for (const buf of imgBuffers) {
+        const base64Data = buf.toString("base64");
+        const slide = pptx.addSlide();
+        slide.addImage({
+          data: `image/jpeg;base64,${base64Data}`,
+          x: 0,
+          y: 0,
+          w: "100%",
+          h: "100%"
+        });
+      }
+      const pptxPath = join(targetDir, `${folderName}.pptx`);
+      await pptx.writeFile({ fileName: pptxPath });
+      console.log(`[Downloader] Saved PPTX to ${pptxPath}`);
+    } catch (err: any) {
+      console.error(`[Downloader] Failed to generate PPTX for ${folderName}:`, err.message || err);
+    }
+  }
 }

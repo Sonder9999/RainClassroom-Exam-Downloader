@@ -22,6 +22,8 @@ export interface Config {
   concurrency: number;
   offlineMode: boolean;
   showArchived: boolean;
+  autoConvertPdf: boolean;
+  autoConvertPpt: boolean;
   yuketangUrl: string;
   yuketangWsUrl: string;
   cookies: Cookies;
@@ -64,6 +66,8 @@ export async function loadConfig(): Promise<Config> {
         concurrency: 5,
         offlineMode: false,
         showArchived: false,
+        autoConvertPdf: false,
+        autoConvertPpt: false,
         yuketangUrl: "https://www.yuketang.cn",
         yuketangWsUrl: "wss://www.yuketang.cn/wsapp/",
         cookies: {

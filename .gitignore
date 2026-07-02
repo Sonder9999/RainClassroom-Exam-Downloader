@@ -16,3 +16,5 @@ __pycache__/
 
 docs/
 AGENT.md
+downloads/
+test_downloads/

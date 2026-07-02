@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=1.0.1">
 </head>
 <body>
   <!-- Dynamic background glow elements matching Firefly styling -->
@@ -136,13 +136,27 @@
               <input type="number" id="setting-concurrency" class="input-control" min="1" max="10" placeholder="5">
             </div>
 
-            <div class="settings-group">
-              <label id="setting-show-archived-label" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
-                <span>显示已归档的旧学期课程：</span>
-                <label class="switch" style="pointer-events: none;">
-                  <input type="checkbox" id="setting-show-archived">
-                  <span class="slider round"></span>
-                </label>
+            <div class="settings-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <label for="setting-show-archived" style="cursor: pointer; margin: 0; user-select: none;">显示已归档的旧学期课程：</label>
+              <label class="switch">
+                <input type="checkbox" id="setting-show-archived">
+                <span class="slider round"></span>
+              </label>
+            </div>
+
+            <div class="settings-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <label for="setting-auto-convert-pdf" style="cursor: pointer; margin: 0; user-select: none;">下载课件后自动转换为 PDF 格式：</label>
+              <label class="switch">
+                <input type="checkbox" id="setting-auto-convert-pdf">
+                <span class="slider round"></span>
+              </label>
+            </div>
+
+            <div class="settings-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <label for="setting-auto-convert-ppt" style="cursor: pointer; margin: 0; user-select: none;">下载课件后自动转换为 PPT 格式：</label>
+              <label class="switch">
+                <input type="checkbox" id="setting-auto-convert-ppt">
+                <span class="slider round"></span>
               </label>
             </div>
 
@@ -183,6 +197,6 @@
     </div>
   </div>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=1.0.1"></script>
 </body>
 </html>

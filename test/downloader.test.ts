@@ -36,7 +36,7 @@ describe("Downloader Queue and Problem Extraction Tests", () => {
     await downloadLesson(classroomId, lessonId, courseName, lessonIndex, lessonTitle);
 
     // Verify slide files exist
-    const lessonDir = join(process.cwd(), testDownloadDir, courseName, "11_第5章（2）");
+    const lessonDir = join(process.cwd(), testDownloadDir, courseName, "11_编译原理_20260520");
     const slide1 = join(lessonDir, "001.jpg"); // First slide index is 1
     const slideExists = await fs.stat(slide1).then(() => true).catch(() => false);
     expect(slideExists).toBe(true);
@@ -91,17 +91,23 @@ describe("Downloader Queue and Problem Extraction Tests", () => {
     const lessonIndex = 3;
     const lessonTitle = "计算机图形学 Computer Graphics-0323";
 
+    // Enable PDF/PPT conversion for testing
+    await updateConfig({
+      autoConvertPdf: true,
+      autoConvertPpt: true
+    });
+
     // Run the download process directly
     await downloadLesson(classroomId, lessonId, courseName, lessonIndex, lessonTitle);
 
-    // Verify multiple presentation subfolders exist
-    const lessonDir = join(process.cwd(), testDownloadDir, courseName, "03_计算机图形学 Computer Graphics-0323");
+    // Verify multiple presentation subfolders exist directly under courseName
+    const courseNameDir = join(process.cwd(), testDownloadDir, courseName);
     
-    // We expect two subdirectories for presentations:
-    // 1. "计算机图形学 Computer Graphics_1647680688570567680"
-    // 2. "计算机图形学 Computer Graphics_1647712743136259840"
-    const subfolder1 = join(lessonDir, "计算机图形学 Computer Graphics_1647680688570567680");
-    const subfolder2 = join(lessonDir, "计算机图形学 Computer Graphics_1647712743136259840");
+    // We expect two directories for presentations:
+    // 1. "03_计算机图形学_20260323_1"
+    // 2. "03_计算机图形学_20260323_2"
+    const subfolder1 = join(courseNameDir, "03_计算机图形学_20260323_1");
+    const subfolder2 = join(courseNameDir, "03_计算机图形学_20260323_2");
     
     const subfolder1Exists = await fs.stat(subfolder1).then(() => true).catch(() => false);
     const subfolder2Exists = await fs.stat(subfolder2).then(() => true).catch(() => false);
@@ -115,14 +121,31 @@ describe("Downloader Queue and Problem Extraction Tests", () => {
     expect(files1.length).toBeGreaterThan(0);
     expect(files2.length).toBeGreaterThan(0);
 
-    // Verify problems folder and extracted problems exist with pres prefix
-    const problemDir = join(process.cwd(), testDownloadDir, courseName, "problem");
-    const prob1 = join(problemDir, "03_pres1_01.jpg");
-    const prob2 = join(problemDir, "03_pres2_01.jpg");
+    // Verify PDF and PPTX files were successfully generated
+    const pdf1 = join(subfolder1, "03_计算机图形学_20260323_1.pdf");
+    const pptx1 = join(subfolder1, "03_计算机图形学_20260323_1.pptx");
+    const pdf2 = join(subfolder2, "03_计算机图形学_20260323_2.pdf");
+    const pptx2 = join(subfolder2, "03_计算机图形学_20260323_2.pptx");
+
+    expect(await fs.stat(pdf1).then(() => true).catch(() => false)).toBe(true);
+    expect(await fs.stat(pptx1).then(() => true).catch(() => false)).toBe(true);
+    expect(await fs.stat(pdf2).then(() => true).catch(() => false)).toBe(true);
+    expect(await fs.stat(pptx2).then(() => true).catch(() => false)).toBe(true);
+
+    // Verify problems folder and extracted problems exist with correct naming
+    const problemDir = join(courseNameDir, "problem");
+    const prob1 = join(problemDir, "03_1_01.jpg");
+    const prob2 = join(problemDir, "03_2_01.jpg");
     const prob1Exists = await fs.stat(prob1).then(() => true).catch(() => false);
     const prob2Exists = await fs.stat(prob2).then(() => true).catch(() => false);
 
     expect(prob1Exists).toBe(true);
     expect(prob2Exists).toBe(true);
+
+    // Reset config options
+    await updateConfig({
+      autoConvertPdf: false,
+      autoConvertPpt: false
+    });
   });
 });
