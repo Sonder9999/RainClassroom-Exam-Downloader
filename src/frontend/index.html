@@ -136,28 +136,39 @@
               <input type="number" id="setting-concurrency" class="input-control" min="1" max="10" placeholder="5">
             </div>
 
-            <div class="settings-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-              <label for="setting-show-archived" style="cursor: pointer; margin: 0; user-select: none;">显示已归档的旧学期课程：</label>
-              <label class="switch">
-                <input type="checkbox" id="setting-show-archived">
-                <span class="slider round"></span>
-              </label>
-            </div>
+            <div class="settings-card" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 0.5rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
+                <div style="display: flex; flex-direction: column; gap: 0.25rem; text-align: left; padding-right: 1.5rem;">
+                  <label for="setting-show-archived" style="font-size: 0.9rem; font-weight: 500; color: var(--text-main); cursor: pointer; user-select: none;">显示已归档的旧学期课程</label>
+                  <span style="font-size: 0.75rem; color: var(--text-sub);">在课程大纲列表中包含已结课或归档的历史学期</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="setting-show-archived">
+                  <span class="slider round"></span>
+                </label>
+              </div>
 
-            <div class="settings-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-              <label for="setting-auto-convert-pdf" style="cursor: pointer; margin: 0; user-select: none;">下载课件后自动转换为 PDF 格式：</label>
-              <label class="switch">
-                <input type="checkbox" id="setting-auto-convert-pdf">
-                <span class="slider round"></span>
-              </label>
-            </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
+                <div style="display: flex; flex-direction: column; gap: 0.25rem; text-align: left; padding-right: 1.5rem;">
+                  <label for="setting-auto-convert-pdf" style="font-size: 0.9rem; font-weight: 500; color: var(--text-main); cursor: pointer; user-select: none;">下载课件后自动转换为 PDF 格式</label>
+                  <span style="font-size: 0.75rem; color: var(--text-sub);">下载课件图片完成后，自动合并并输出单份高清 PDF 文档</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="setting-auto-convert-pdf">
+                  <span class="slider round"></span>
+                </label>
+              </div>
 
-            <div class="settings-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-              <label for="setting-auto-convert-ppt" style="cursor: pointer; margin: 0; user-select: none;">下载课件后自动转换为 PPT 格式：</label>
-              <label class="switch">
-                <input type="checkbox" id="setting-auto-convert-ppt">
-                <span class="slider round"></span>
-              </label>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; flex-direction: column; gap: 0.25rem; text-align: left; padding-right: 1.5rem;">
+                  <label for="setting-auto-convert-ppt" style="font-size: 0.9rem; font-weight: 500; color: var(--text-main); cursor: pointer; user-select: none;">下载课件后自动转换为 PPT 格式</label>
+                  <span style="font-size: 0.75rem; color: var(--text-sub);">下载课件图片完成后，自动生成 16:9 比例的高清 PowerPoint 课件</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="setting-auto-convert-ppt">
+                  <span class="slider round"></span>
+                </label>
+              </div>
             </div>
 
             <div class="settings-group">
